@@ -1,0 +1,39 @@
+﻿# Dependency directories
+node_modules/
+client/node_modules/
+server/node_modules/
+__pycache__/
+*.pyc
+.venv/
+env/
+
+# Environment and secrets (CRITICAL: Never commit secrets)
+.env
+.env.local
+.env.*.local
+client/.env
+server/.env
+ai-service/.env
+
+# Build outputs
+client/dist/
+dist/
+build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# OS and Editor metadata
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
