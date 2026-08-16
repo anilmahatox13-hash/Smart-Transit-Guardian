@@ -7,6 +7,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
+import DriverConsole from './pages/DriverConsole';
 
 function App() {
   return (
@@ -31,6 +32,15 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/driver"
+            element={
+              <ProtectedRoute allowedRoles={['driver', 'admin']}>
+                <DriverConsole />
               </ProtectedRoute>
             }
           />

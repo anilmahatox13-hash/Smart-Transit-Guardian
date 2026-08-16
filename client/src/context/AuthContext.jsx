@@ -7,7 +7,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     const token = localStorage.getItem('transit_token');
     const savedUser = localStorage.getItem('transit_user');
-    // Only initialize user if an active token is also present
     if (token && savedUser) {
       try {
         return JSON.parse(savedUser);
@@ -29,7 +28,6 @@ export const AuthProvider = ({ children }) => {
     const verifyUser = async () => {
       const token = localStorage.getItem('transit_token');
       if (!token) {
-        logout();
         setLoading(false);
         return;
       }
@@ -39,12 +37,11 @@ export const AuthProvider = ({ children }) => {
         if (res.data?.user) {
           setUser(res.data.user);
           localStorage.setItem('transit_user', JSON.stringify(res.data.user));
-        } else {
-          logout();
         }
       } catch (error) {
-        console.error('Session expired or invalid:', error);
-        logout();
+        if (error.response && error.response.status === 401) {
+          logout();
+        }
       } finally {
         setLoading(false);
       }
@@ -53,8 +50,8 @@ export const AuthProvider = ({ children }) => {
     verifyUser();
   }, []);
 
-  const login = async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
+  const login = async (identifier, password) => {
+    const res = await api.post('/auth/login', { identifier, password });
     const { token, user: loggedUser } = res.data;
     localStorage.setItem('transit_token', token);
     localStorage.setItem('transit_user', JSON.stringify(loggedUser));

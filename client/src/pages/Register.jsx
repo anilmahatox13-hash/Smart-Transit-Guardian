@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { Bus, Lock, Mail, User, Phone, ShieldCheck, ArrowRight, RotateCw, AlertCircle } from 'lucide-react';
+import { Bus, Lock, Mail, User, Phone, ShieldCheck, ArrowRight, RotateCw, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 const Register = () => {
+  const { user, register } = useAuth();
   const { t } = useLanguage();
+  const navigate = useNavigate();
+
   const [authMethod, setAuthMethod] = useState('email'); // 'email' | 'phone'
   const [step, setStep] = useState(1);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -22,8 +26,10 @@ const Register = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const { register } = useAuth();
-  const navigate = useNavigate();
+  // Redirect if already authenticated
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
 
   useEffect(() => {
     let interval;
@@ -72,22 +78,23 @@ const Register = () => {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 transition-colors">
       <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-6 sm:p-8">
+        
         <div className="text-center mb-5">
-          <div className="w-11 h-11 bg-emerald-600 rounded-xl flex items-center justify-center text-white mx-auto mb-2 shadow-sm">
+          <div className="w-12 h-12 bg-emerald-600 rounded-2xl flex items-center justify-center text-white mx-auto mb-2 shadow-md">
             <Bus className="w-6 h-6" />
           </div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">
             {step === 1 ? t('signUp') : 'Verify OTP'}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Smart Transit Guardian Onboarding
+            Join the SmartTransit Guardian Network
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs flex items-center space-x-2">
+          <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs flex items-center space-x-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{error}</span>
           </div>
@@ -96,7 +103,7 @@ const Register = () => {
         {step === 1 ? (
           <form onSubmit={handleRequestOtp} className="space-y-3">
             {/* Method Toggle: Email vs Phone */}
-            <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-3">
+            <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-2">
               <button
                 type="button"
                 onClick={() => setAuthMethod('email')}
@@ -113,7 +120,7 @@ const Register = () => {
                   authMethod === 'phone' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-500'
                 }`}
               >
-                Mobile Phone Number
+                Phone Number
               </button>
             </div>
 
@@ -128,7 +135,7 @@ const Register = () => {
                   value={formData.name}
                   onChange={handleChange}
                   placeholder="John Doe"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
                 />
               </div>
             </div>
@@ -145,7 +152,7 @@ const Register = () => {
                     value={formData.email}
                     onChange={handleChange}
                     placeholder="user@example.com"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
                   />
                 </div>
               </div>
@@ -161,7 +168,7 @@ const Register = () => {
                     value={formData.phone}
                     onChange={handleChange}
                     placeholder="+977 9801234567 / +91 9876543210"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
                   />
                 </div>
               </div>
@@ -172,15 +179,22 @@ const Register = () => {
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   name="password"
                   required
                   minLength={6}
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="••••••••"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-10 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2 text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 
@@ -197,16 +211,17 @@ const Register = () => {
               </select>
             </div>
 
+            {/* Primary Submit Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded-xl text-sm transition flex items-center justify-center space-x-2 mt-4"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded-xl text-xs transition flex items-center justify-center space-x-2 mt-4 shadow-sm"
             >
               {loading ? (
                 <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
               ) : (
                 <>
-                  <span>Send Real Verification OTP</span>
+                  <span>Send Verification Code</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -216,7 +231,7 @@ const Register = () => {
           <form onSubmit={handleVerifyAndRegister} className="space-y-4">
             {otpPreview && (
               <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-center">
-                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">OTP Code:</p>
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">OTP Preview Code:</p>
                 <p className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-300 tracking-widest mt-0.5">
                   {otpPreview}
                 </p>
@@ -255,7 +270,7 @@ const Register = () => {
             <button
               type="submit"
               disabled={loading || formData.otp.length < 6}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded-xl text-sm transition flex items-center justify-center space-x-2"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded-xl text-xs transition flex items-center justify-center space-x-2"
             >
               <ShieldCheck className="w-4 h-4" />
               <span>{t('verify')}</span>
@@ -263,12 +278,15 @@ const Register = () => {
           </form>
         )}
 
-        <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-5">
-          Already have an account?{' '}
-          <Link to="/login" className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium">
-            {t('signIn')}
-          </Link>
-        </p>
+        {/* Switch to Sign In (Directly below button) */}
+        <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Already have an account?{' '}
+            <Link to="/login" className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline">
+              {t('signIn')}
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

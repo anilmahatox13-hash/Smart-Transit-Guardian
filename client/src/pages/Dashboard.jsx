@@ -2,327 +2,380 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import LiveMap from '../components/LiveMap';
 import { useLanguage } from '../context/LanguageContext';
-import { Bus, Route as RouteIcon, ShieldAlert, Radio, Search, Star, MessageSquare, CheckCircle2, ChevronRight, X, MapPin } from 'lucide-react';
+import { useRegion } from '../context/RegionContext';
+import { REGION_DATA } from '../data/regions';
+import { 
+  Bus, 
+  MapPin, 
+  PhoneCall, 
+  Search, 
+  RotateCcw, 
+  Star, 
+  Users, 
+  ShieldAlert, 
+  Radio, 
+  Share2,
+  PackageSearch,
+  CheckCircle2, 
+  X,
+  CreditCard
+} from 'lucide-react';
 
 const Dashboard = () => {
   const { t } = useLanguage();
+  const { country, province, district, currency } = useRegion();
   const [buses, setBuses] = useState([]);
-  const [routes, setRoutes] = useState([]);
   const [selectedBus, setSelectedBus] = useState(null);
-  const [selectedRoute, setSelectedRoute] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  // Search & Filtering
-  const [searchQuery, setSearchQuery] = useState('');
-  const [originSearch, setOriginSearch] = useState('');
-  const [destinationSearch, setDestinationSearch] = useState('');
-  const [selectedRegion, setSelectedRegion] = useState('all');
+  // Chowk Search State
+  const [originChowk, setOriginChowk] = useState('');
+  const [destChowk, setDestChowk] = useState('');
+  const [busTypeFilter, setBusTypeFilter] = useState('all');
 
-  // Rating Modal State
-  const [ratingModalBus, setRatingModalBus] = useState(null);
-  const [driverRating, setDriverRating] = useState(5);
-  const [ratingComment, setRatingComment] = useState('');
-  const [ratingSuccess, setRatingSuccess] = useState(false);
+  // Lost and Found Modal
+  const [lostModalOpen, setLostModalOpen] = useState(false);
+  const [lostBus, setLostBus] = useState(null);
+  const [lostForm, setLostForm] = useState({ passengerName: '', passengerPhone: '', itemDescription: '', chowkLost: '', travelDate: new Date().toISOString().split('T')[0] });
+  const [lostSuccess, setLostSuccess] = useState(false);
 
-  const [loading, setLoading] = useState(true);
-  const [sosSent, setSosSent] = useState(false);
+  // Simulated QR Payment Modal
+  const [payModalBus, setPayModalBus] = useState(null);
+  const [paySuccess, setPaySuccess] = useState(false);
 
-  const fetchFleetData = async () => {
+  const fetchBuses = async () => {
+    setLoading(true);
     try {
-      const [busesRes, routesRes] = await Promise.all([
-        api.get('/buses'),
-        api.get('/routes')
-      ]);
-      setBuses(busesRes.data.buses || []);
-      setRoutes(routesRes.data.routes || []);
-      if (routesRes.data.routes?.length > 0 && !selectedRoute) {
-        setSelectedRoute(routesRes.data.routes[0]);
-      }
+      const params = new URLSearchParams({
+        country,
+        stateProvince: province,
+        ...(busTypeFilter !== 'all' && { busType: busTypeFilter }),
+        ...(originChowk && { originChowk }),
+        ...(destChowk && { destinationChowk })
+      });
+      const res = await api.get(`/buses?${params.toString()}`);
+      setBuses(res.data.buses || []);
     } catch (err) {
-      console.error('Error loading transit data:', err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchFleetData();
-    const interval = setInterval(fetchFleetData, 6000);
+    fetchBuses();
+    const interval = setInterval(fetchBuses, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [country, province, district, busTypeFilter]);
 
-  const handleTriggerSOS = async () => {
-    try {
-      await api.post('/emergencies', {
-        type: 'sos',
-        description: 'Passenger emergency SOS triggered from live map',
-        busId: selectedBus?._id || null,
-        latitude: 16.2335,
-        longitude: 80.5501
-      });
-      setSosSent(true);
-      setTimeout(() => setSosSent(false), 4000);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleRateSubmit = async (e) => {
+  const handleSearchSubmit = (e) => {
     e.preventDefault();
-    if (!ratingModalBus?.driverId?._id) return;
+    fetchBuses();
+  };
+
+  const handleReset = () => {
+    setOriginChowk('');
+    setDestChowk('');
+    setBusTypeFilter('all');
+    fetchBuses();
+  };
+
+  const handleLostSubmit = async (e) => {
+    e.preventDefault();
     try {
-      await api.post('/auth/rate-driver', {
-        driverId: ratingModalBus.driverId._id,
-        rating: driverRating,
-        comment: ratingComment
-      });
-      setRatingSuccess(true);
+      await api.post('/buses/lost-found', { ...lostForm, busId: lostBus._id });
+      setLostSuccess(true);
       setTimeout(() => {
-        setRatingSuccess(false);
-        setRatingModalBus(null);
-        setRatingComment('');
+        setLostSuccess(false);
+        setLostModalOpen(false);
+        setLostForm({ passengerName: '', passengerPhone: '', itemDescription: '', chowkLost: '', travelDate: new Date().toISOString().split('T')[0] });
       }, 1500);
-      fetchFleetData();
     } catch (err) {
-      alert(err.response?.data?.message || 'Error submitting rating.');
+      alert('Failed to report lost item');
     }
   };
 
-  const filteredBuses = buses.filter(bus => {
-    const matchesSearch = bus.busNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (bus.busName && bus.busName.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesOrigin = !originSearch || (bus.origin && bus.origin.toLowerCase().includes(originSearch.toLowerCase()));
-    const matchesDest = !destinationSearch || (bus.destination && bus.destination.toLowerCase().includes(destinationSearch.toLowerCase()));
-    const matchesRegion = selectedRegion === 'all' || bus.stateRegion === selectedRegion;
-    return matchesSearch && matchesOrigin && matchesDest && matchesRegion;
-  });
+  const popularChowks = REGION_DATA[country]?.popularChowks || [];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
       
-      {/* Top Banner KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-medium">{t('totalFleet')}</span>
-            <Bus className="w-4 h-4 text-emerald-600" />
-          </div>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white mt-2">{buses.length}</p>
+      {/* Chowk Search & Fare Estimator Banner */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-3xl shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+            <span>📍 Chowk-to-Chowk Commuter Route Planner</span>
+          </h2>
+          <span className="text-xs text-slate-400 font-medium">{country} Coverage Active</span>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-medium">{t('activeBuses')}</span>
-            <Radio className="w-4 h-4 text-teal-600" />
+        <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
+          {/* Origin Chowk with Autocomplete Datalsit */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Boarding Chowk / Stop</label>
+            <input
+              type="text"
+              list="origin-chowk-list"
+              placeholder="e.g. Kalanki Chowk, Gongabu..."
+              value={originChowk}
+              onChange={(e) => setOriginChowk(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+            />
+            <datalist id="origin-chowk-list">
+              {popularChowks.map((c) => <option key={c} value={c} />)}
+            </datalist>
           </div>
-          <p className="text-2xl font-bold text-slate-900 dark:text-white mt-2">
-            {buses.filter(b => b.status === 'active').length}
-          </p>
-        </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-medium">State / Region</span>
-            <MapPin className="w-4 h-4 text-sky-600" />
+          {/* Destination Chowk */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Dropping Chowk / Landmark</label>
+            <input
+              type="text"
+              list="dest-chowk-list"
+              placeholder="e.g. Prithvi Chowk, Mugling..."
+              value={destChowk}
+              onChange={(e) => setDestChowk(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+            />
+            <datalist id="dest-chowk-list">
+              {popularChowks.map((c) => <option key={c} value={c} />)}
+            </datalist>
           </div>
-          <select
-            value={selectedRegion}
-            onChange={(e) => setSelectedRegion(e.target.value)}
-            className="mt-2 w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1 text-xs text-slate-900 dark:text-white"
-          >
-            <option value="all">{t('allRegions')}</option>
-            <option value="Bagmati / Central">Bagmati / Central</option>
-            <option value="Gandaki / West">Gandaki / West</option>
-            <option value="Andhra / South">Andhra / South</option>
-          </select>
-        </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-medium">Safety Alert</span>
-            <ShieldAlert className="w-4 h-4 text-rose-600" />
+          {/* Bus Type */}
+          <div>
+            <label className="text-[11px] font-semibold text-slate-500 block mb-1">Vehicle Category</label>
+            <select
+              value={busTypeFilter}
+              onChange={(e) => setBusTypeFilter(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+            >
+              <option value="all">All Fleet Types</option>
+              <option value="AC Deluxe">AC Deluxe</option>
+              <option value="Super Deluxe">Super Deluxe</option>
+              <option value="Sleeper Coach">Sleeper Coach</option>
+              <option value="Express">Express</option>
+            </select>
           </div>
-          <button
-            onClick={handleTriggerSOS}
-            className={`w-full text-xs font-medium py-1.5 rounded-lg transition ${
-              sosSent ? 'bg-emerald-600 text-white' : 'bg-rose-600 hover:bg-rose-700 text-white'
-            }`}
-          >
-            {sosSent ? 'Dispatched' : t('sosAlert')}
-          </button>
-        </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-end space-x-2">
+            <button
+              type="submit"
+              className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold py-2 px-3 rounded-xl flex items-center justify-center space-x-1.5 transition shadow-xs"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Search Buses</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-xl"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
+        </form>
       </div>
 
-      {/* Origin & Destination Search Trip Planner */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">
-            📍 {t('origin')}
-          </label>
-          <input
-            type="text"
-            placeholder="e.g. Kathmandu, Central Station..."
-            value={originSearch}
-            onChange={(e) => setOriginSearch(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
-          />
-        </div>
-        <div>
-          <label className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">
-            🎯 {t('destination')}
-          </label>
-          <input
-            type="text"
-            placeholder="e.g. University Campus, Pokhara..."
-            value={destinationSearch}
-            onChange={(e) => setDestinationSearch(e.target.value)}
-            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
-          />
-        </div>
-      </div>
-
-      {/* Main Dual Pane Layout */}
+      {/* Main Dual Grid: Bus Radar Cards + Live Map */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Left Bus Radar Panel */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col h-[540px] shadow-xs">
-          <div className="space-y-3 mb-3">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-sm text-slate-900 dark:text-white">{t('fleet')}</h2>
-              <span className="text-xs text-slate-500">{filteredBuses.length} buses</span>
-            </div>
-
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-              <input
-                type="text"
-                placeholder={t('searchBus')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 dark:text-white focus:outline-none"
-              />
-            </div>
+        {/* Left Side: Bus Cards */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 flex flex-col h-[580px] shadow-xs">
+          <div className="flex items-center justify-between mb-3">
+            <span className="font-bold text-xs text-slate-900 dark:text-white">Active Buses on Radar</span>
+            <span className="text-[11px] text-slate-400 font-mono">{buses.length} tracked</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-            {filteredBuses.map((bus) => {
-              const isSelected = selectedBus?._id === bus._id;
-              const activeDriver = bus.isDriverAbsent ? bus.substituteDriverId : bus.driverId;
+          <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+            {buses.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs p-4 text-center">
+                <Bus className="w-8 h-8 text-slate-300 mb-2" />
+                <p>No active buses found for this Chowk filter.</p>
+                <button onClick={handleReset} className="text-emerald-600 underline mt-2 font-medium">
+                  Clear Filters & Show All
+                </button>
+              </div>
+            ) : (
+              buses.map((bus) => {
+                const isSelected = selectedBus?._id === bus._id;
+                const activeDriver = bus.isDriverAbsent ? bus.substituteDriverId : bus.driverId;
+                const driverPhone = activeDriver?.phone || bus.contactPhone;
 
-              return (
-                <div
-                  key={bus._id}
-                  onClick={() => setSelectedBus(bus)}
-                  className={`p-3 rounded-xl border cursor-pointer transition flex flex-col space-y-2 ${
-                    isSelected
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500'
-                      : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-1.5 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 rounded-lg">
-                        <Bus className="w-4 h-4" />
+                const getCrowdBadge = (crowd) => {
+                  switch (crowd) {
+                    case 'full':
+                      return { label: '🔴 Full / Packed', bg: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400' };
+                    case 'moderate':
+                      return { label: '🟡 Standing Only', bg: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400' };
+                    default:
+                      return { label: '🟢 Seats Available', bg: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' };
+                  }
+                };
+                const crowd = getCrowdBadge(bus.crowdStatus);
+
+                return (
+                  <div
+                    key={bus._id}
+                    onClick={() => setSelectedBus(bus)}
+                    className={`p-3.5 rounded-2xl border cursor-pointer transition flex flex-col space-y-2.5 ${
+                      isSelected
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 shadow-sm'
+                        : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className="p-2 bg-emerald-100 dark:bg-emerald-950 text-emerald-600 rounded-xl">
+                          <Bus className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-xs text-slate-900 dark:text-white">{bus.busNumber}</p>
+                          <p className="text-[10px] text-slate-400 font-medium">{bus.busName}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-bold text-xs text-slate-900 dark:text-white">{bus.busNumber}</p>
-                        <p className="text-[10px] text-slate-400">{bus.busName}</p>
+                      <div className="text-right">
+                        <span className="text-xs font-extrabold text-slate-900 dark:text-white">
+                          {currency} {bus.baseFare}
+                        </span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md block mt-0.5 ${crowd.bg}`}>
+                          {crowd.label}
+                        </span>
                       </div>
                     </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                      {bus.capacity} {t('seats')}
-                    </span>
-                  </div>
 
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between border-t border-slate-100 dark:border-slate-700/60 pt-1.5">
-                    <span>{bus.origin} ➔ {bus.destination}</span>
-                    {activeDriver && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRatingModalBus(bus);
-                        }}
-                        className="text-amber-500 hover:underline flex items-center space-x-1"
-                      >
-                        <Star className="w-3 h-3 fill-amber-500" />
-                        <span>{activeDriver.averageRating || '5.0'}</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {bus.isDriverAbsent && (
-                    <div className="text-[10px] bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 p-1.5 rounded-lg">
-                      ⚠️ {t('driverAbsent')}
+                    <div className="text-[11px] font-semibold text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/80 p-2 rounded-xl flex items-center justify-between">
+                      <span className="text-emerald-600 truncate">{bus.originChowk}</span>
+                      <span className="text-slate-400 px-1">➔</span>
+                      <span className="text-sky-600 truncate">{bus.destinationChowk}</span>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+
+                    {/* Driver Contact & Lost Item Reporting */}
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700/60">
+                      <div className="text-[11px] text-slate-500">
+                        <span>Driver: {activeDriver?.name || 'Assigned Driver'}</span>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5">
+                        {driverPhone && (
+                          <a
+                            href={`tel:${driverPhone.replace(/\s+/g, '')}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold px-2 py-1 rounded-lg flex items-center space-x-1 shadow-2xs"
+                          >
+                            <PhoneCall className="w-3 h-3" />
+                            <span>Call</span>
+                          </a>
+                        )}
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLostBus(bus);
+                            setLostModalOpen(true);
+                          }}
+                          className="p-1 text-slate-400 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+                          title="Report Lost Item"
+                        >
+                          <PackageSearch className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
-        {/* Right Map Canvas */}
+        {/* Right Side: Map Canvas */}
         <div className="lg:col-span-2">
           <LiveMap
             buses={buses}
             selectedBus={selectedBus}
             onSelectBus={setSelectedBus}
-            activeRoute={selectedRoute}
+            country={country}
           />
         </div>
       </div>
 
-      {/* Driver Rating Modal */}
-      {ratingModalBus && (
+      {/* Lost and Found Modal */}
+      {lostModalOpen && lostBus && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xl relative">
+          <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl relative">
             <button
-              onClick={() => setRatingModalBus(null)}
+              onClick={() => setLostModalOpen(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <h3 className="font-bold text-base text-slate-900 dark:text-white mb-1">{t('rateDriver')}</h3>
+            <div className="flex items-center space-x-2 text-amber-500 mb-2">
+              <PackageSearch className="w-5 h-5" />
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">Report Lost Item</h3>
+            </div>
             <p className="text-xs text-slate-500 mb-4">
-              Driver: {ratingModalBus.isDriverAbsent ? ratingModalBus.substituteDriverId?.name : ratingModalBus.driverId?.name}
+              Bus {lostBus.busNumber} • {lostBus.originChowk} ➔ {lostBus.destinationChowk}
             </p>
 
-            {ratingSuccess ? (
+            {lostSuccess ? (
               <div className="p-3 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs flex items-center space-x-2">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Thank you for your rating!</span>
+                <span>Ticket registered. Driver and operator notified.</span>
               </div>
             ) : (
-              <form onSubmit={handleRateSubmit} className="space-y-4">
-                <div className="flex justify-center space-x-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setDriverRating(star)}
-                      className="p-1"
-                    >
-                      <Star className={`w-7 h-7 ${star <= driverRating ? 'text-amber-400 fill-amber-400' : 'text-slate-300'}`} />
-                    </button>
-                  ))}
-                </div>
-
+              <form onSubmit={handleLostSubmit} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Comments (Optional)</label>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Your Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={lostForm.passengerName}
+                    onChange={(e) => setLostForm({ ...lostForm, passengerName: e.target.value })}
+                    placeholder="Anil Mahato"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Your Phone Number</label>
+                  <input
+                    type="tel"
+                    required
+                    value={lostForm.passengerPhone}
+                    onChange={(e) => setLostForm({ ...lostForm, passengerPhone: e.target.value })}
+                    placeholder="+977 9800000000"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Chowk / Landmark Dropped</label>
+                  <input
+                    type="text"
+                    required
+                    value={lostForm.chowkLost}
+                    onChange={(e) => setLostForm({ ...lostForm, chowkLost: e.target.value })}
+                    placeholder="Near Kalanki Chowk"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Item Description</label>
                   <textarea
-                    rows={3}
-                    value={ratingComment}
-                    onChange={(e) => setRatingComment(e.target.value)}
-                    placeholder="Safe driving, clean bus, punctual..."
+                    rows={2}
+                    required
+                    value={lostForm.itemDescription}
+                    onChange={(e) => setLostForm({ ...lostForm, itemDescription: e.target.value })}
+                    placeholder="Black backpack with laptop, wallet on seat 14..."
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-white focus:outline-none"
                   ></textarea>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 rounded-xl text-xs transition"
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 rounded-xl text-xs transition"
                 >
-                  {t('submitRating')}
+                  Submit Lost Ticket
                 </button>
               </form>
             )}
