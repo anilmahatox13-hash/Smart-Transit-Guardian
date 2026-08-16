@@ -14,6 +14,9 @@ const busRoutes = require('./routes/busRoutes');
 const routeRoutes = require('./routes/routeRoutes');
 const tripRoutes = require('./routes/tripRoutes');
 const locationRoutes = require('./routes/locationRoutes');
+const emergencyRoutes = require('./routes/emergencyRoutes');
+const maintenanceRoutes = require('./routes/maintenanceRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
 const app = express();
 
@@ -54,13 +57,16 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Mount Core API Routes
+// Mount All Core API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/buses', busRoutes);
 app.use('/api/routes', routeRoutes);
 app.use('/api/trips', tripRoutes);
 app.use('/api/locations', locationRoutes);
+app.use('/api/emergencies', emergencyRoutes);
+app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // 404 Fallback Handler
 app.use((req, res) => {
