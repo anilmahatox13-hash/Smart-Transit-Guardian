@@ -1,34 +1,29 @@
 const jwt = require('jsonwebtoken');
-const { User, Bus } = require('../models');
+const { User } = require('../models');
 
-// In-memory OTP store for verification (email -> { otp, expiresAt })
 const otpStore = new Map();
 
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '7d'
-  });
+  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 };
 
-// @desc    Send 6-digit OTP for signup / password reset
-// @route   POST /api/auth/send-otp
+// Send OTP to Phone or Email
 const sendOtp = async (req, res) => {
   try {
-    const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'Please provide an email address.' });
+    const { identifier } = req.body; // email or phone
+    if (!identifier) {
+      return res.status(400).json({ success: false, message: 'Please provide an email or phone number.' });
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000;
+    otpStore.set(identifier.toLowerCase().trim(), { otp, expiresAt });
 
-    otpStore.set(email.toLowerCase(), { otp, expiresAt });
-
-    console.log(`[SmartTransit Security] OTP for ${email}: ${otp}`);
+    console.log(`[SmartTransit Security] OTP for ${identifier}: ${otp}`);
 
     res.status(200).json({
       success: true,
-      message: 'Verification OTP sent successfully.',
+      message: `Verification OTP sent to ${identifier}.`,
       otpPreview: process.env.NODE_ENV !== 'production' ? otp : undefined
     });
   } catch (error) {
@@ -36,37 +31,41 @@ const sendOtp = async (req, res) => {
   }
 };
 
-// @desc    Verify OTP and register new user
-// @route   POST /api/auth/register
+// Register with Email OR Phone
 const register = async (req, res) => {
   try {
-    const { name, email, password, role, phone, otp } = req.body;
+    const { name, email, phone, password, role, otp } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide name, email, and password.' });
+    if (!name || !password || (!email && !phone)) {
+      return res.status(400).json({ success: false, message: 'Provide name, password, and either email or phone.' });
     }
 
-    const record = otpStore.get(email.toLowerCase());
+    const identifier = (email || phone).toLowerCase().trim();
+    const record = otpStore.get(identifier);
     if (otp) {
       if (!record || record.otp !== otp || Date.now() > record.expiresAt) {
         return res.status(400).json({ success: false, message: 'Invalid or expired OTP code.' });
       }
-      otpStore.delete(email.toLowerCase());
+      otpStore.delete(identifier);
     }
 
-    const userExists = await User.findOne({ email: email.toLowerCase() });
-    if (userExists) {
-      return res.status(400).json({ success: false, message: 'A user with this email already exists.' });
-    }
+    const existingUser = await User.findOne({
+      $or: [
+        ...(email ? [{ email: email.toLowerCase() }] : []),
+        ...(phone ? [{ phone }] : [])
+      ]
+    });
 
-    const assignedRole = (role === 'driver' || role === 'passenger') ? role : 'passenger';
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'Account already exists with this email or phone.' });
+    }
 
     const user = await User.create({
       name,
-      email: email.toLowerCase(),
+      email: email ? email.toLowerCase() : undefined,
+      phone: phone || undefined,
       password,
-      role: assignedRole,
-      phone: phone || '',
+      role: (role === 'driver' || role === 'admin') ? role : 'passenger',
       isVerified: true
     });
 
@@ -74,14 +73,14 @@ const register = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: 'User registered and verified successfully.',
+      message: 'Account created successfully.',
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
-        phone: user.phone
+        phone: user.phone,
+        role: user.role
       }
     });
   } catch (error) {
@@ -89,39 +88,39 @@ const register = async (req, res) => {
   }
 };
 
-// @desc    Authenticate user & get token
-// @route   POST /api/auth/login
+// Login with Email OR Phone
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { identifier, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide an email and password.' });
+    if (!identifier || !password) {
+      return res.status(400).json({ success: false, message: 'Please provide email/phone and password.' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    const cleanIdentifier = identifier.trim();
+    const user = await User.findOne({
+      $or: [
+        { email: cleanIdentifier.toLowerCase() },
+        { phone: cleanIdentifier }
+      ]
+    }).select('+password');
 
     if (!user || !(await user.matchPassword(password))) {
-      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
-    }
-
-    if (!user.active) {
-      return res.status(403).json({ success: false, message: 'Account is deactivated. Contact admin.' });
+      return res.status(401).json({ success: false, message: 'Invalid credentials. Please check email/phone or password.' });
     }
 
     const token = generateToken(user._id);
 
     res.status(200).json({
       success: true,
-      message: 'Login successful.',
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
         phone: user.phone,
-        twoFactorEnabled: user.twoFactorEnabled || false
+        role: user.role,
+        averageRating: user.averageRating
       }
     });
   } catch (error) {
@@ -129,49 +128,82 @@ const login = async (req, res) => {
   }
 };
 
-// @desc    Reset password using OTP
-// @route   POST /api/auth/reset-password
-const resetPassword = async (req, res) => {
+// Rate Driver
+const rateDriver = async (req, res) => {
   try {
-    const { email, otp, newPassword } = req.body;
-
-    if (!email || !otp || !newPassword) {
-      return res.status(400).json({ success: false, message: 'Please provide email, OTP, and new password.' });
+    const { driverId, rating, comment } = req.body;
+    if (!driverId || !rating) {
+      return res.status(400).json({ success: false, message: 'Driver ID and rating (1-5) are required.' });
     }
 
-    const record = otpStore.get(email.toLowerCase());
-    if (!record || record.otp !== otp || Date.now() > record.expiresAt) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired OTP code.' });
+    const driver = await User.findById(driverId);
+    if (!driver || driver.role !== 'driver') {
+      return res.status(404).json({ success: false, message: 'Driver not found.' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'No user account found with this email.' });
-    }
+    driver.ratings.push({ passengerId: req.user.id, rating: Number(rating), comment });
+    const total = driver.ratings.reduce((acc, curr) => acc + curr.rating, 0);
+    driver.averageRating = Number((total / driver.ratings.length).toFixed(1));
+    await driver.save();
 
-    user.password = newPassword;
-    await user.save();
-    otpStore.delete(email.toLowerCase());
-
-    res.status(200).json({ success: true, message: 'Password reset successfully. You can now sign in.' });
+    res.status(200).json({
+      success: true,
+      message: 'Rating submitted successfully.',
+      averageRating: driver.averageRating
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get current user profile
-// @route   GET /api/users/me
+// Reset Password
+const resetPassword = async (req, res) => {
+  try {
+    const { identifier, otp, newPassword } = req.body;
+    const cleanIdentifier = identifier.toLowerCase().trim();
+    const record = otpStore.get(cleanIdentifier);
+
+    if (!record || record.otp !== otp || Date.now() > record.expiresAt) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP code.' });
+    }
+
+    const user = await User.findOne({
+      $or: [{ email: cleanIdentifier }, { phone: cleanIdentifier }]
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Account not found.' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+    otpStore.delete(cleanIdentifier);
+
+    res.status(200).json({ success: true, message: 'Password reset successfully.' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Get Drivers List (For Admin and Substitution)
+const getDrivers = async (req, res) => {
+  try {
+    const drivers = await User.find({ role: 'driver', active: true }).select('name email phone averageRating');
+    res.status(200).json({ success: true, drivers });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).populate('assignedBus');
+    const user = await User.findById(req.user.id);
     res.status(200).json({ success: true, user });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Update profile & security settings
-// @route   PUT /api/users/profile
 const updateProfile = async (req, res) => {
   try {
     const { name, phone, twoFactorEnabled, currentPassword, newPassword } = req.body;
@@ -192,15 +224,8 @@ const updateProfile = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: 'Profile settings updated successfully.',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        twoFactorEnabled: user.twoFactorEnabled
-      }
+      message: 'Profile updated successfully.',
+      user: { id: user._id, name: user.name, email: user.email, phone: user.phone, role: user.role }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -212,6 +237,8 @@ module.exports = {
   register,
   login,
   resetPassword,
+  rateDriver,
+  getDrivers,
   getMe,
   updateProfile
 };

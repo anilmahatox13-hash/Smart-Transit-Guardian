@@ -2,16 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { Bus, Lock, Mail, User, Phone, ShieldCheck, ArrowRight, RotateCw, AlertCircle } from 'lucide-react';
 
 const Register = () => {
+  const { t } = useLanguage();
+  const [authMethod, setAuthMethod] = useState('email'); // 'email' | 'phone'
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    phone: '',
     password: '',
     role: 'passenger',
-    phone: '',
     otp: ''
   });
   const [otpPreview, setOtpPreview] = useState('');
@@ -30,22 +33,25 @@ const Register = () => {
     return () => clearInterval(interval);
   }, [step, timer]);
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleRequestOtp = async (e) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    const target = authMethod === 'email' ? formData.email : formData.phone;
+    if (!target) {
+      setError(`Please enter a valid ${authMethod}`);
+      return;
+    }
 
+    setLoading(true);
     try {
-      const res = await api.post('/auth/send-otp', { email: formData.email });
+      const res = await api.post('/auth/send-otp', { identifier: target });
       setOtpPreview(res.data.otpPreview || '123456');
       setStep(2);
       setTimer(30);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send verification OTP.');
+      setError(err.response?.data?.message || 'Failed to send OTP.');
     } finally {
       setLoading(false);
     }
@@ -55,30 +61,28 @@ const Register = () => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       await register(formData);
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid OTP code.');
+      setError(err.response?.data?.message || 'Invalid verification OTP.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 transition-colors">
+    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950">
       <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-6 sm:p-8">
-        
-        <div className="text-center mb-6">
-          <div className="w-11 h-11 bg-emerald-600 rounded-xl flex items-center justify-center text-white mx-auto mb-3 shadow-sm">
+        <div className="text-center mb-5">
+          <div className="w-11 h-11 bg-emerald-600 rounded-xl flex items-center justify-center text-white mx-auto mb-2 shadow-sm">
             <Bus className="w-6 h-6" />
           </div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-            {step === 1 ? 'Create Account' : 'Verify Email Address'}
+            {step === 1 ? t('signUp') : 'Verify OTP'}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            {step === 1 ? 'Join the SmartTransit Fleet Network' : `We sent a 6-digit code to ${formData.email}`}
+            Smart Transit Guardian Onboarding
           </p>
         </div>
 
@@ -90,7 +94,29 @@ const Register = () => {
         )}
 
         {step === 1 ? (
-          <form onSubmit={handleRequestOtp} className="space-y-3.5">
+          <form onSubmit={handleRequestOtp} className="space-y-3">
+            {/* Method Toggle: Email vs Phone */}
+            <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-3">
+              <button
+                type="button"
+                onClick={() => setAuthMethod('email')}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition ${
+                  authMethod === 'email' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-500'
+                }`}
+              >
+                Email Address
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthMethod('phone')}
+                className={`flex-1 py-1.5 text-xs font-medium rounded-lg transition ${
+                  authMethod === 'phone' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-500'
+                }`}
+              >
+                Mobile Phone Number
+              </button>
+            </div>
+
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Full Name</label>
               <div className="relative">
@@ -102,26 +128,44 @@ const Register = () => {
                   value={formData.name}
                   onChange={handleChange}
                   placeholder="John Doe"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
-              <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="email"
-                  name="email"
-                  required
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="name@example.com"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
+            {authMethod === 'email' ? (
+              <div>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="email"
+                    name="email"
+                    required
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="user@example.com"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none"
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Mobile Phone Number</label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="tel"
+                    name="phone"
+                    required
+                    value={formData.phone}
+                    onChange={handleChange}
+                    placeholder="+977 9801234567 / +91 9876543210"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Password</label>
@@ -134,29 +178,14 @@ const Register = () => {
                   minLength={6}
                   value={formData.password}
                   onChange={handleChange}
-                  placeholder="At least 6 characters"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  placeholder="••••••••"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Phone (Optional)</label>
-              <div className="relative">
-                <Phone className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="text"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  placeholder="+91 9876543210"
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Role</label>
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Account Role</label>
               <select
                 name="role"
                 value={formData.role}
@@ -164,7 +193,7 @@ const Register = () => {
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
               >
                 <option value="passenger">Passenger / Commuter</option>
-                <option value="driver">Transit Driver</option>
+                <option value="driver">Transit Fleet Driver</option>
               </select>
             </div>
 
@@ -177,7 +206,7 @@ const Register = () => {
                 <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
               ) : (
                 <>
-                  <span>Send Verification Code</span>
+                  <span>Send Real Verification OTP</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -187,8 +216,8 @@ const Register = () => {
           <form onSubmit={handleVerifyAndRegister} className="space-y-4">
             {otpPreview && (
               <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-center">
-                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">Demo OTP Code:</p>
-                <p className="text-lg font-bold font-mono text-emerald-700 dark:text-emerald-300 tracking-widest mt-0.5">
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">OTP Code:</p>
+                <p className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-300 tracking-widest mt-0.5">
                   {otpPreview}
                 </p>
               </div>
@@ -196,7 +225,7 @@ const Register = () => {
 
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1 text-center">
-                Enter 6-Digit OTP
+                {t('otpCode')}
               </label>
               <input
                 type="text"
@@ -206,50 +235,38 @@ const Register = () => {
                 value={formData.otp}
                 onChange={handleChange}
                 placeholder="••••••"
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-center text-lg font-mono tracking-widest text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-center text-xl font-mono tracking-widest text-slate-900 dark:text-white focus:outline-none"
               />
             </div>
 
             <div className="flex items-center justify-between text-xs text-slate-500">
-              <button
-                type="button"
-                onClick={() => setStep(1)}
-                className="hover:underline text-slate-600 dark:text-slate-400"
-              >
-                ← Back
-              </button>
+              <button type="button" onClick={() => setStep(1)} className="hover:underline">← Back</button>
               <button
                 type="button"
                 disabled={timer > 0}
                 onClick={handleRequestOtp}
-                className="text-emerald-600 dark:text-emerald-400 font-medium hover:underline disabled:text-slate-400 flex items-center space-x-1"
+                className="text-emerald-600 dark:text-emerald-400 font-medium disabled:text-slate-400 flex items-center space-x-1"
               >
                 <RotateCw className="w-3 h-3" />
-                <span>{timer > 0 ? `Resend in ${timer}s` : 'Resend Code'}</span>
+                <span>{timer > 0 ? `Resend (${timer}s)` : 'Resend Code'}</span>
               </button>
             </div>
 
             <button
               type="submit"
               disabled={loading || formData.otp.length < 6}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded-xl text-sm transition flex items-center justify-center space-x-2 disabled:opacity-50"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded-xl text-sm transition flex items-center justify-center space-x-2"
             >
-              {loading ? (
-                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-              ) : (
-                <>
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Verify & Create Account</span>
-                </>
-              )}
+              <ShieldCheck className="w-4 h-4" />
+              <span>{t('verify')}</span>
             </button>
           </form>
         )}
 
-        <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6">
+        <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-5">
           Already have an account?{' '}
           <Link to="/login" className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium">
-            Sign In
+            {t('signIn')}
           </Link>
         </p>
       </div>

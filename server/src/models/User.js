@@ -1,63 +1,37 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Please provide a name'],
-    trim: true,
-    maxlength: [50, 'Name cannot exceed 50 characters']
-  },
-  email: {
-    type: String,
-    required: [true, 'Please provide an email address'],
-    unique: true,
-    lowercase: true,
-    trim: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please provide a valid email']
-  },
-  password: {
-    type: String,
-    required: [true, 'Please provide a password'],
-    minlength: [6, 'Password must be at least 6 characters'],
-    select: false
-  },
+  name: { type: String, required: true, trim: true },
+  email: { type: String, lowercase: true, trim: true, sparse: true },
+  phone: { type: String, trim: true, sparse: true },
+  password: { type: String, required: true, minlength: 6, select: false },
   role: {
     type: String,
     enum: ['passenger', 'driver', 'admin'],
     default: 'passenger'
   },
-  phone: {
-    type: String,
-    trim: true,
-    default: ''
-  },
-  active: {
-    type: Boolean,
-    default: true
-  },
-  assignedBus: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Bus',
-    default: null
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
-});
+  stateRegion: { type: String, default: 'National / All Regions' },
+  ratings: [{
+    passengerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    rating: { type: Number, min: 1, max: 5 },
+    comment: String,
+    createdAt: { type: Date, default: Date.now }
+  }],
+  averageRating: { type: Number, default: 5.0 },
+  active: { type: Boolean, default: true },
+  isVerified: { type: Boolean, default: true },
+  twoFactorEnabled: { type: Boolean, default: false }
+}, { timestamps: true });
 
-// Hash password using bcrypt before saving (Mongoose v8 async hook)
-userSchema.pre('save', async function () {
-  if (!this.isModified('password')) {
-    return;
-  }
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+  next();
 });
 
-// Compare password method
-userSchema.methods.matchPassword = async function (enteredPassword) {
+userSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
