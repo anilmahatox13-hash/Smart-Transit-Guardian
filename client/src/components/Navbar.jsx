@@ -1,10 +1,12 @@
 import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Bus, Navigation, Shield, LogOut, Radio, LayoutGrid } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { Bus, Navigation, Radio, LayoutGrid, LogOut, Sun, Moon } from 'lucide-react';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -13,75 +15,51 @@ const Navbar = () => {
     navigate('/login');
   };
 
-  const getRoleBadge = (role) => {
-    switch (role) {
-      case 'admin':
-        return 'bg-purple-500/10 text-purple-400 border-purple-500/30 shadow-purple-500/10';
-      case 'driver':
-        return 'bg-amber-500/10 text-amber-400 border-amber-500/30 shadow-amber-500/10';
-      default:
-        return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 shadow-emerald-500/10';
-    }
-  };
-
   const isActive = (path) => location.pathname === path;
 
   return (
-    <nav className="sticky top-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-slate-800/80 transition-all duration-300">
+    <header className="sticky top-0 z-50 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           
-          {/* Brand Logo with Glow */}
-          <Link to="/" className="flex items-center space-x-3 group">
-            <div className="relative">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/25 group-hover:shadow-emerald-500/40 group-hover:scale-105 transition-all duration-200">
-                <Bus className="w-5 h-5" />
-              </div>
-              <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-              </span>
+          {/* Brand Logo */}
+          <Link to="/" className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-sm">
+              <Bus className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <span className="font-bold text-base tracking-tight text-white group-hover:text-emerald-400 transition-colors">
-                  SmartTransit
-                </span>
-                <span className="px-1.5 py-0.5 text-[9px] font-mono tracking-wider font-semibold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md">
-                  LIVE
-                </span>
-              </div>
-              <span className="text-[10px] text-slate-400 font-mono tracking-widest block uppercase -mt-0.5">
-                Guardian Fleet AI
+              <span className="font-semibold text-base text-slate-900 dark:text-white tracking-tight">
+                SmartTransit
+              </span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-normal -mt-1">
+                Fleet Management
               </span>
             </div>
           </Link>
 
-          {/* Navigation Links & Action Hub */}
-          <div className="flex items-center space-x-2 sm:space-x-4">
-            {user ? (
-              <>
-                {/* Live Map Link */}
+          {/* Navigation Items */}
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            {user && (
+              <nav className="flex items-center space-x-1 mr-2">
                 <Link
                   to="/"
-                  className={`flex items-center space-x-2 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
                     isActive('/')
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                      ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
                   }`}
                 >
                   <Navigation className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Live Fleet Map</span>
+                  <span>Map</span>
                 </Link>
 
-                {/* Driver Link */}
                 {user.role === 'driver' && (
                   <Link
                     to="/driver"
-                    className={`flex items-center space-x-2 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
                       isActive('/driver')
-                        ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                        ? 'bg-slate-100 dark:bg-slate-800 text-amber-600 dark:text-amber-400'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
                     }`}
                   >
                     <Radio className="w-3.5 h-3.5" />
@@ -89,60 +67,66 @@ const Navbar = () => {
                   </Link>
                 )}
 
-                {/* Admin Link */}
                 {user.role === 'admin' && (
                   <Link
                     to="/admin"
-                    className={`flex items-center space-x-2 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
                       isActive('/admin')
-                        ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
+                        ? 'bg-slate-100 dark:bg-slate-800 text-purple-600 dark:text-purple-400'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
                     }`}
                   >
                     <LayoutGrid className="w-3.5 h-3.5" />
-                    <span>Admin Hub</span>
+                    <span>Admin</span>
                   </Link>
                 )}
+              </nav>
+            )}
 
-                {/* User Profile Info Pill */}
-                <div className="flex items-center space-x-2.5 pl-3 border-l border-slate-800">
-                  <div className="text-right hidden md:block">
-                    <p className="text-xs font-semibold text-slate-200 leading-tight">{user.name}</p>
-                    <span className={`text-[9px] uppercase font-mono px-1.5 py-0.5 rounded-md border inline-block mt-0.5 shadow-sm ${getRoleBadge(user.role)}`}>
-                      {user.role}
-                    </span>
-                  </div>
+            {/* Theme Toggle Button */}
+            <button
+              onClick={toggleTheme}
+              aria-label="Toggle Theme"
+              className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
+            </button>
 
-                  {/* Logout Button */}
-                  <button
-                    onClick={handleLogout}
-                    title="Sign Out"
-                    className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition-all duration-150"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
+            {/* User Profile / Logout */}
+            {user ? (
+              <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+                <div className="hidden sm:block text-right">
+                  <p className="text-xs font-medium text-slate-800 dark:text-slate-200">{user.name}</p>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 capitalize">{user.role}</span>
                 </div>
-              </>
+                <button
+                  onClick={handleLogout}
+                  title="Sign out"
+                  className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
             ) : (
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2">
                 <Link
                   to="/login"
-                  className="text-xs font-semibold text-slate-300 hover:text-white px-3 py-1.5 rounded-xl hover:bg-slate-800 transition"
+                  className="text-xs font-medium text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                 >
-                  Sign In
+                  Log in
                 </Link>
                 <Link
                   to="/register"
-                  className="text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl shadow-lg shadow-emerald-600/20 transition duration-150"
+                  className="text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg shadow-sm transition"
                 >
-                  Get Started
+                  Sign up
                 </Link>
               </div>
             )}
           </div>
         </div>
       </div>
-    </nav>
+    </header>
   );
 };
 
