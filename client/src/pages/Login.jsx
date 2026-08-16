@@ -1,15 +1,35 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Bus, Lock, Mail, AlertCircle, Shield, Truck, User } from 'lucide-react';
+import api from '../services/api';
+import { Bus, Lock, Mail, AlertCircle, CheckCircle2, Shield, Truck, User, ArrowRight, KeyRound, X } from 'lucide-react';
 
 const Login = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('passenger1@transit.com');
+  const [password, setPassword] = useState('Password123!');
+  const [activeRole, setActiveRole] = useState('passenger');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Forgot Password Modal State
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState('');
+  const [forgotErr, setForgotErr] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  const handleRoleSelect = (role, demoEmail) => {
+    setActiveRole(role);
+    setEmail(demoEmail);
+    setPassword('Password123!');
+    setError('');
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,56 +48,104 @@ const Login = () => {
     }
   };
 
-  const handleQuickFill = (demoEmail) => {
-    setEmail(demoEmail);
-    setPassword('Password123!');
+  const handleSendResetOtp = async () => {
+    if (!forgotEmail) {
+      setForgotErr('Please enter your email first.');
+      return;
+    }
+    setForgotLoading(true);
+    setForgotErr('');
+    try {
+      const res = await api.post('/auth/send-otp', { email: forgotEmail });
+      setOtpSent(true);
+      setForgotMsg(`OTP code sent! (Demo preview: ${res.data.otpPreview || '123456'})`);
+    } catch (err) {
+      setForgotErr(err.response?.data?.message || 'Failed to send OTP.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    setForgotErr('');
+    try {
+      await api.post('/auth/reset-password', {
+        email: forgotEmail,
+        otp: forgotOtp,
+        newPassword
+      });
+      setForgotMsg('Password reset successfully! You can now log in.');
+      setTimeout(() => {
+        setShowForgotModal(false);
+        setPassword(newPassword);
+        setEmail(forgotEmail);
+      }, 1500);
+    } catch (err) {
+      setForgotErr(err.response?.data?.message || 'Failed to reset password.');
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 transition-colors duration-200">
-      <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-6 sm:p-8">
+    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-slate-50 dark:bg-slate-950 transition-colors">
+      <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-6 sm:p-8">
         
-        {/* Header */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center mx-auto mb-3">
+          <div className="w-11 h-11 bg-emerald-600 rounded-xl flex items-center justify-center text-white mx-auto mb-3 shadow-sm">
             <Bus className="w-6 h-6" />
           </div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Sign in to your account</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Smart Transit Guardian Telematics System</p>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Sign in to SmartTransit</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Real-Time Fleet & Telematics Management</p>
         </div>
 
-        {/* Demo Fast Fill Section */}
-        <div className="mb-5 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700/60">
-          <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-2">Demo Quick-Fill:</p>
-          <div className="grid grid-cols-3 gap-2">
+        {/* Integrated Role Switcher Chips Above Email */}
+        <div className="mb-4">
+          <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+            Select Account Role
+          </label>
+          <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl">
             <button
               type="button"
-              onClick={() => handleQuickFill('admin@transit.com')}
-              className="px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 rounded text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center justify-center space-x-1 transition shadow-2xs"
+              onClick={() => handleRoleSelect('passenger', 'passenger1@transit.com')}
+              className={`py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center space-x-1.5 transition ${
+                activeRole === 'passenger'
+                  ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
             >
-              <Shield className="w-3 h-3 text-purple-600 dark:text-purple-400" />
-              <span>Admin</span>
+              <User className="w-3.5 h-3.5" />
+              <span>Passenger</span>
             </button>
             <button
               type="button"
-              onClick={() => handleQuickFill('driver1@transit.com')}
-              className="px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 rounded text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center justify-center space-x-1 transition shadow-2xs"
+              onClick={() => handleRoleSelect('driver', 'driver1@transit.com')}
+              className={`py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center space-x-1.5 transition ${
+                activeRole === 'driver'
+                  ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
             >
-              <Truck className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+              <Truck className="w-3.5 h-3.5" />
               <span>Driver</span>
             </button>
             <button
               type="button"
-              onClick={() => handleQuickFill('passenger1@transit.com')}
-              className="px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 rounded text-xs font-medium text-slate-700 dark:text-slate-200 flex items-center justify-center space-x-1 transition shadow-2xs"
+              onClick={() => handleRoleSelect('admin', 'admin@transit.com')}
+              className={`py-1.5 px-2 rounded-lg text-xs font-medium flex items-center justify-center space-x-1.5 transition ${
+                activeRole === 'admin'
+                  ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
             >
-              <User className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-              <span>User</span>
+              <Shield className="w-3.5 h-3.5" />
+              <span>Admin</span>
             </button>
           </div>
         </div>
 
-        {/* Error Alert */}
         {error && (
           <div className="mb-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs flex items-center space-x-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -85,25 +153,38 @@ const Login = () => {
           </div>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Email address</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
             <div className="relative">
               <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
               <input
                 type="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@transit.com"
-                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400 transition"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setActiveRole('');
+                }}
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Password</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium text-slate-700 dark:text-slate-300">Password</label>
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotEmail(email);
+                  setShowForgotModal(true);
+                }}
+                className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline font-medium"
+              >
+                Forgot password?
+              </button>
+            </div>
             <div className="relative">
               <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
               <input
@@ -111,8 +192,7 @@ const Login = () => {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400 transition"
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
           </div>
@@ -120,12 +200,15 @@ const Login = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 rounded-lg transition duration-150 flex items-center justify-center space-x-2 disabled:opacity-50 text-sm shadow-sm"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded-xl transition duration-150 flex items-center justify-center space-x-2 text-sm shadow-sm"
           >
             {loading ? (
               <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
             ) : (
-              <span>Sign in</span>
+              <>
+                <span>Sign in</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
             )}
           </button>
         </form>
@@ -133,10 +216,105 @@ const Login = () => {
         <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6">
           Don't have an account?{' '}
           <Link to="/register" className="text-emerald-600 dark:text-emerald-400 hover:underline font-medium">
-            Register here
+            Register with OTP
           </Link>
         </p>
       </div>
+
+      {/* Forgot Password OTP Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xl relative">
+            <button
+              onClick={() => setShowForgotModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-2 text-emerald-600 dark:text-emerald-400 mb-3">
+              <KeyRound className="w-5 h-5" />
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">Reset Password</h3>
+            </div>
+
+            {forgotMsg && (
+              <div className="mb-3 p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs flex items-center space-x-1.5">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <span>{forgotMsg}</span>
+              </div>
+            )}
+
+            {forgotErr && (
+              <div className="mb-3 p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-lg text-xs flex items-center space-x-1.5">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{forgotErr}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleResetPassword} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Email Address</label>
+                <div className="flex space-x-2">
+                  <input
+                    type="email"
+                    required
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="name@transit.com"
+                    className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendResetOtp}
+                    disabled={forgotLoading}
+                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-medium"
+                  >
+                    Send OTP
+                  </button>
+                </div>
+              </div>
+
+              {otpSent && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Enter 6-Digit OTP</label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      required
+                      value={forgotOtp}
+                      onChange={(e) => setForgotOtp(e.target.value)}
+                      placeholder="123456"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-center tracking-widest text-slate-900 dark:text-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">New Password</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Minimum 6 characters"
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 rounded-xl text-xs transition"
+                  >
+                    Confirm & Update Password
+                  </button>
+                </>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

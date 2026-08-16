@@ -1,4 +1,4 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
@@ -7,7 +7,7 @@ const api = axios.create({
   },
 });
 
-// Request Interceptor: Attach JWT token if present in localStorage
+// Request Interceptor: Attach Bearer token if present
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('transit_token');
@@ -19,16 +19,13 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor: Handle global 401 unauthorized errors
+// Response Interceptor: Clean local storage on 401 without forcing hard page reloads
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
       localStorage.removeItem('transit_token');
       localStorage.removeItem('transit_user');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
     }
     return Promise.reject(error);
   }
