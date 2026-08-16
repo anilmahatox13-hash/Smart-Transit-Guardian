@@ -10,6 +10,8 @@ require('./models');
 // Route imports
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
+const busRoutes = require('./routes/busRoutes');
+const routeRoutes = require('./routes/routeRoutes');
 
 const app = express();
 
@@ -31,7 +33,7 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Health Check Probe (reports server & database state)
+// Health Check Probe
 app.get('/api/health', (req, res) => {
   const dbState = mongoose.connection.readyState;
   const dbStatusMap = {
@@ -53,6 +55,8 @@ app.get('/api/health', (req, res) => {
 // Mount Core API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/buses', busRoutes);
+app.use('/api/routes', routeRoutes);
 
 // 404 Fallback Handler
 app.use((req, res) => {
