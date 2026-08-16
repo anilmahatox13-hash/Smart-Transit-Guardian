@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import LiveMap from '../components/LiveMap';
+import AddBusModal from '../components/AddBusModal';
+import SeatBookingModal from '../components/SeatBookingModal';
+import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useRegion } from '../context/RegionContext';
 import { REGION_DATA } from '../data/regions';
@@ -10,38 +13,42 @@ import {
   PhoneCall, 
   Search, 
   RotateCcw, 
-  Star, 
-  Users, 
-  ShieldAlert, 
+  Plus, 
   Radio, 
-  Share2,
-  PackageSearch,
+  PackageSearch, 
   CheckCircle2, 
-  X,
-  CreditCard
+  X, 
+  Ticket 
 } from 'lucide-react';
 
 const Dashboard = () => {
+  const { user } = useAuth();
   const { t } = useLanguage();
   const { country, province, district, currency } = useRegion();
   const [buses, setBuses] = useState([]);
   const [selectedBus, setSelectedBus] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Chowk Search State
+  // Search States
   const [originChowk, setOriginChowk] = useState('');
   const [destChowk, setDestChowk] = useState('');
   const [busTypeFilter, setBusTypeFilter] = useState('all');
 
-  // Lost and Found Modal
+  // Booking & Add Bus Modals
+  const [isAddBusModalOpen, setIsAddBusModalOpen] = useState(false);
+  const [bookingBus, setBookingBus] = useState(null);
+
+  // Lost Item Modal
   const [lostModalOpen, setLostModalOpen] = useState(false);
   const [lostBus, setLostBus] = useState(null);
-  const [lostForm, setLostForm] = useState({ passengerName: '', passengerPhone: '', itemDescription: '', chowkLost: '', travelDate: new Date().toISOString().split('T')[0] });
+  const [lostForm, setLostForm] = useState({ 
+    passengerName: user?.name || '', 
+    passengerPhone: user?.phone || '', 
+    itemDescription: '', 
+    chowkLost: '', 
+    travelDate: new Date().toISOString().split('T')[0] 
+  });
   const [lostSuccess, setLostSuccess] = useState(false);
-
-  // Simulated QR Payment Modal
-  const [payModalBus, setPayModalBus] = useState(null);
-  const [paySuccess, setPaySuccess] = useState(false);
 
   const fetchBuses = async () => {
     setLoading(true);
@@ -50,8 +57,8 @@ const Dashboard = () => {
         country,
         stateProvince: province,
         ...(busTypeFilter !== 'all' && { busType: busTypeFilter }),
-        ...(originChowk && { originChowk }),
-        ...(destChowk && { destinationChowk })
+        ...(originChowk.trim() && { originChowk: originChowk.trim() }),
+        ...(destChowk.trim() && { destinationChowk: destChowk.trim() })
       });
       const res = await api.get(`/buses?${params.toString()}`);
       setBuses(res.data.buses || []);
@@ -88,61 +95,79 @@ const Dashboard = () => {
       setTimeout(() => {
         setLostSuccess(false);
         setLostModalOpen(false);
-        setLostForm({ passengerName: '', passengerPhone: '', itemDescription: '', chowkLost: '', travelDate: new Date().toISOString().split('T')[0] });
+        setLostForm({ 
+          passengerName: user?.name || '', 
+          passengerPhone: user?.phone || '', 
+          itemDescription: '', 
+          chowkLost: '', 
+          travelDate: new Date().toISOString().split('T')[0] 
+        });
       }, 1500);
     } catch (err) {
       alert('Failed to report lost item');
     }
   };
 
+  const districtChowks = REGION_DATA[country]?.provinces[province]?.[district] || [];
   const popularChowks = REGION_DATA[country]?.popularChowks || [];
+  const autocompleteList = [...new Set([...districtChowks, ...popularChowks])];
+
+  // Only Owners or Admins have permission to add buses
+  const canAddBus = user?.role === 'operator' || user?.role === 'admin';
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-5">
       
-      {/* Chowk Search & Fare Estimator Banner */}
+      {/* Search Banner */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-5 rounded-3xl shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
-            <span>📍 Chowk-to-Chowk Commuter Route Planner</span>
-          </h2>
-          <span className="text-xs text-slate-400 font-medium">{country} Coverage Active</span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+              <span>📍 {province} ({district}) Commuter Route Planner</span>
+            </h2>
+            <p className="text-[11px] text-slate-500">Live Chowk-wise GPS, Regulated Fares & Direct Seat Reservation</p>
+          </div>
+          
+          {/* ONLY SHOWN TO VERIFIED BUS OWNERS AND ADMINS */}
+          {canAddBus && (
+            <button
+              onClick={() => setIsAddBusModalOpen(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3.5 py-2 rounded-xl flex items-center space-x-1.5 transition shadow-sm self-start sm:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Bus to Fleet</span>
+            </button>
+          )}
         </div>
 
-        <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
-          {/* Origin Chowk with Autocomplete Datalsit */}
+        <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-2.5 pt-1">
           <div>
             <label className="text-[11px] font-semibold text-slate-500 block mb-1">Boarding Chowk / Stop</label>
             <input
               type="text"
-              list="origin-chowk-list"
+              list="chowk-datalist"
               placeholder="e.g. Kalanki Chowk, Gongabu..."
               value={originChowk}
               onChange={(e) => setOriginChowk(e.target.value)}
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
             />
-            <datalist id="origin-chowk-list">
-              {popularChowks.map((c) => <option key={c} value={c} />)}
-            </datalist>
           </div>
 
-          {/* Destination Chowk */}
           <div>
             <label className="text-[11px] font-semibold text-slate-500 block mb-1">Dropping Chowk / Landmark</label>
             <input
               type="text"
-              list="dest-chowk-list"
-              placeholder="e.g. Prithvi Chowk, Mugling..."
+              list="chowk-datalist"
+              placeholder="e.g. Prithvi Chowk, Koteshwor..."
               value={destChowk}
               onChange={(e) => setDestChowk(e.target.value)}
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
             />
-            <datalist id="dest-chowk-list">
-              {popularChowks.map((c) => <option key={c} value={c} />)}
-            </datalist>
           </div>
+          <datalist id="chowk-datalist">
+            {autocompleteList.map(c => <option key={c} value={c} />)}
+          </datalist>
 
-          {/* Bus Type */}
           <div>
             <label className="text-[11px] font-semibold text-slate-500 block mb-1">Vehicle Category</label>
             <select
@@ -158,7 +183,6 @@ const Dashboard = () => {
             </select>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex items-end space-x-2">
             <button
               type="submit"
@@ -206,7 +230,7 @@ const Dashboard = () => {
                 const getCrowdBadge = (crowd) => {
                   switch (crowd) {
                     case 'full':
-                      return { label: '🔴 Full / Packed', bg: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400' };
+                      return { label: '🔴 Full', bg: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400' };
                     case 'moderate':
                       return { label: '🟡 Standing Only', bg: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400' };
                     default:
@@ -231,8 +255,8 @@ const Dashboard = () => {
                           <Bus className="w-4 h-4" />
                         </div>
                         <div>
-                          <p className="font-bold text-xs text-slate-900 dark:text-white">{bus.busNumber}</p>
-                          <p className="text-[10px] text-slate-400 font-medium">{bus.busName}</p>
+                          <p className="font-bold text-xs text-slate-900 dark:text-white">{bus.busName}</p>
+                          <p className="text-[10px] text-slate-400 font-mono font-semibold">{bus.busNumber}</p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -251,36 +275,43 @@ const Dashboard = () => {
                       <span className="text-sky-600 truncate">{bus.destinationChowk}</span>
                     </div>
 
-                    {/* Driver Contact & Lost Item Reporting */}
+                    {/* Passenger Action Bar: Book Seat, Direct Call, Report Lost */}
                     <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-700/60">
-                      <div className="text-[11px] text-slate-500">
-                        <span>Driver: {activeDriver?.name || 'Assigned Driver'}</span>
-                      </div>
-
                       <div className="flex items-center space-x-1.5">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBookingBus(bus);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl flex items-center space-x-1 transition shadow-xs"
+                        >
+                          <Ticket className="w-3.5 h-3.5" />
+                          <span>Book Seat</span>
+                        </button>
+
                         {driverPhone && (
                           <a
                             href={`tel:${driverPhone.replace(/\s+/g, '')}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold px-2 py-1 rounded-lg flex items-center space-x-1 shadow-2xs"
+                            className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-[11px] font-semibold px-2.5 py-1.5 rounded-xl flex items-center space-x-1"
                           >
-                            <PhoneCall className="w-3 h-3" />
+                            <PhoneCall className="w-3 h-3 text-emerald-600" />
                             <span>Call</span>
                           </a>
                         )}
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setLostBus(bus);
-                            setLostModalOpen(true);
-                          }}
-                          className="p-1 text-slate-400 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
-                          title="Report Lost Item"
-                        >
-                          <PackageSearch className="w-4 h-4" />
-                        </button>
                       </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLostBus(bus);
+                          setLostModalOpen(true);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+                        title="Report Lost Item"
+                      >
+                        <PackageSearch className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 );
@@ -295,12 +326,35 @@ const Dashboard = () => {
             buses={buses}
             selectedBus={selectedBus}
             onSelectBus={setSelectedBus}
+            onBookSeat={(bus) => setBookingBus(bus)}
             country={country}
           />
         </div>
       </div>
 
-      {/* Lost and Found Modal */}
+      {/* Seat Booking Modal */}
+      <SeatBookingModal
+        isOpen={!!bookingBus}
+        bus={bookingBus}
+        onClose={() => setBookingBus(null)}
+        onBookingSuccess={() => {
+          fetchBuses();
+        }}
+      />
+
+      {/* Add Bus Modal (Available only to Owners / Admins) */}
+      {canAddBus && (
+        <AddBusModal
+          isOpen={isAddBusModalOpen}
+          onClose={() => setIsAddBusModalOpen(false)}
+          onBusAdded={(newBus) => {
+            fetchBuses();
+            setSelectedBus(newBus);
+          }}
+        />
+      )}
+
+      {/* Lost & Found Modal */}
       {lostModalOpen && lostBus && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl relative">
@@ -313,67 +367,67 @@ const Dashboard = () => {
 
             <div className="flex items-center space-x-2 text-amber-500 mb-2">
               <PackageSearch className="w-5 h-5" />
-              <h3 className="font-bold text-base text-slate-900 dark:text-white">Report Lost Item</h3>
+              <h3 className="font-bold text-base text-slate-900 dark:text-white">Report Lost Item on Bus</h3>
             </div>
             <p className="text-xs text-slate-500 mb-4">
-              Bus {lostBus.busNumber} • {lostBus.originChowk} ➔ {lostBus.destinationChowk}
+              {lostBus.busName} ({lostBus.busNumber}) • {lostBus.originChowk} ➔ {lostBus.destinationChowk}
             </p>
 
             {lostSuccess ? (
               <div className="p-3 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs flex items-center space-x-2">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Ticket registered. Driver and operator notified.</span>
+                <span>Ticket registered. Driver & operator notified.</span>
               </div>
             ) : (
-              <form onSubmit={handleLostSubmit} className="space-y-3">
+              <form onSubmit={handleLostSubmit} className="space-y-3 text-xs">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Your Name</label>
+                  <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Passenger Name</label>
                   <input
                     type="text"
                     required
                     value={lostForm.passengerName}
                     onChange={(e) => setLostForm({ ...lostForm, passengerName: e.target.value })}
-                    placeholder="Anil Mahato"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    placeholder="e.g. Ramesh Shrestha"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Your Phone Number</label>
+                  <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Your Phone Number</label>
                   <input
                     type="tel"
                     required
                     value={lostForm.passengerPhone}
                     onChange={(e) => setLostForm({ ...lostForm, passengerPhone: e.target.value })}
                     placeholder="+977 9800000000"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Chowk / Landmark Dropped</label>
+                  <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Chowk / Landmark Dropped</label>
                   <input
                     type="text"
                     required
                     value={lostForm.chowkLost}
                     onChange={(e) => setLostForm({ ...lostForm, chowkLost: e.target.value })}
-                    placeholder="Near Kalanki Chowk"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    placeholder="Near Kalanki Chowk or Mugling"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Item Description</label>
+                  <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">Item Description</label>
                   <textarea
                     rows={2}
                     required
                     value={lostForm.itemDescription}
                     onChange={(e) => setLostForm({ ...lostForm, itemDescription: e.target.value })}
-                    placeholder="Black backpack with laptop, wallet on seat 14..."
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-xs text-slate-900 dark:text-white focus:outline-none"
+                    placeholder="Blue backpack, citizenship certificate, wallet on seat..."
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-slate-900 dark:text-white focus:outline-none"
                   ></textarea>
                 </div>
 
                 <button
                   type="submit"
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 rounded-xl text-xs transition"
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2.5 rounded-xl text-xs transition"
                 >
                   Submit Lost Ticket
                 </button>

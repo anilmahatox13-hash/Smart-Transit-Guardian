@@ -4,14 +4,46 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, lowercase: true, trim: true, sparse: true },
-  phone: { type: String, trim: true, sparse: true },
+  phone: { type: String, required: true, trim: true, unique: true },
   password: { type: String, required: true, minlength: 6, select: false },
   role: {
     type: String,
-    enum: ['passenger', 'driver', 'admin'],
+    enum: ['passenger', 'driver', 'operator', 'admin'],
     default: 'passenger'
   },
-  stateRegion: { type: String, default: 'National / All Regions' },
+  
+  // 1. Universal Government Identity Proof (For All Roles)
+  governmentId: {
+    idType: {
+      type: String,
+      enum: ['Citizenship (Nagarikta)', 'Passport', 'National ID (NID/Aadhaar)', 'Driving License', 'Voter ID'],
+      default: 'Citizenship (Nagarikta)'
+    },
+    idNumber: { type: String, required: true, trim: true },
+    issuingDistrictOrAuthority: { type: String, default: 'Kathmandu' },
+    isVerified: { type: Boolean, default: true }
+  },
+
+  // 2. Bus Owner / Company KYC Profile
+  operatorKyc: {
+    companyName: { type: String, default: '' },
+    registrationNumber: { type: String, default: '' }, // Company / Samiti Reg No
+    panVatNumber: { type: String, default: '' },
+    businessAddress: { type: String, default: '' },
+    isVerified: { type: Boolean, default: false }
+  },
+
+  // 3. Driver Professional KYC (Managed & Recruited by Bus Owner)
+  driverKyc: {
+    licenseNumber: { type: String, default: '' },
+    licenseCategory: { type: String, default: 'Heavy Vehicle (Category B/G)' },
+    licenseExpiry: { type: String, default: '2029-12-31' },
+    employedByOperatorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    policeClearanceVerified: { type: Boolean, default: true },
+    yearsOfExperience: { type: Number, default: 5 }
+  },
+
+  stateRegion: { type: String, default: 'Bagmati / Central' },
   ratings: [{
     passengerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     rating: { type: Number, min: 1, max: 5 },
@@ -24,11 +56,10 @@ const userSchema = new mongoose.Schema({
   twoFactorEnabled: { type: Boolean, default: false }
 }, { timestamps: true });
 
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
+userSchema.pre('save', async function() {
+  if (!this.isModified('password')) return;
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
-  next();
 });
 
 userSchema.methods.matchPassword = async function(enteredPassword) {

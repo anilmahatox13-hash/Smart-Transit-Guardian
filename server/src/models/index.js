@@ -1,17 +1,6 @@
-﻿const User = require('./User');
+const User = require('./User');
 const Bus = require('./Bus');
-const Route = require('./Route');
-const Trip = require('./Trip');
-const Location = require('./Location');
-const Emergency = require('./Emergency');
-const Maintenance = require('./Maintenance');
+const Ticket = require('./Ticket');
+const LostFound = require('./LostFound');
 
-module.exports = {
-  User,
-  Bus,
-  Route,
-  Trip,
-  Location,
-  Emergency,
-  Maintenance
-};
+module.exports = { User, Bus, Ticket, LostFound };

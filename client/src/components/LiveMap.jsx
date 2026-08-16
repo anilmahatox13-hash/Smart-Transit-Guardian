@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { PhoneCall, Share2, Star, Navigation, MapPin } from 'lucide-react';
+import { PhoneCall, Share2, Ticket, ShieldCheck, MapPin } from 'lucide-react';
 
 const MapResizer = () => {
   const map = useMap();
@@ -61,7 +61,7 @@ const createBusIcon = (bus, isSelected) => {
   });
 };
 
-const createChowkIcon = (index) => {
+const createChowkIcon = () => {
   return L.divIcon({
     className: 'chowk-marker',
     html: `
@@ -79,7 +79,7 @@ const createChowkIcon = (index) => {
   });
 };
 
-const LiveMap = ({ buses = [], selectedBus, onSelectBus, country = 'Nepal' }) => {
+const LiveMap = ({ buses = [], selectedBus, onSelectBus, onBookSeat, country = 'Nepal' }) => {
   const defaultCenter = country === 'India' ? [28.6139, 77.2090] : [27.7172, 85.3240];
 
   const currentCenter = selectedBus?.lastLocation?.coordinates
@@ -92,7 +92,7 @@ const LiveMap = ({ buses = [], selectedBus, onSelectBus, country = 'Nepal' }) =>
 
   const handleShareWhatsApp = (bus) => {
     const [lng, lat] = bus.lastLocation.coordinates;
-    const text = encodeURIComponent(`🚍 Live Bus Tracking: I am tracking Bus ${bus.busNumber} (${bus.originChowk} ➔ ${bus.destinationChowk}). Live Map: https://maps.google.com/?q=${lat},${lng}`);
+    const text = encodeURIComponent(`🚍 Live Bus Tracking: Tracking ${bus.busName} (${bus.busNumber}) from ${bus.originChowk} to ${bus.destinationChowk}. Location: https://maps.google.com/?q=${lat},${lng}`);
     window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
   };
 
@@ -113,7 +113,6 @@ const LiveMap = ({ buses = [], selectedBus, onSelectBus, country = 'Nepal' }) =>
           maxZoom={19}
         />
 
-        {/* Route Polyline Track */}
         {routePolyline.length > 1 && (
           <Polyline
             positions={routePolyline}
@@ -121,24 +120,22 @@ const LiveMap = ({ buses = [], selectedBus, onSelectBus, country = 'Nepal' }) =>
           />
         )}
 
-        {/* Selected Bus Intermediate Chowks */}
         {selectedBus?.routeChowks?.map((chowk, idx) => (
           <Marker
             key={chowk._id || idx}
             position={[chowk.coordinates[1], chowk.coordinates[0]]}
-            icon={createChowkIcon(idx)}
+            icon={createChowkIcon()}
           >
             <Popup>
               <div className="p-2 text-xs">
                 <p className="font-bold text-slate-900">{chowk.name}</p>
-                <p className="text-slate-500">Stop #{chowk.sequence} • ~{chowk.estimatedMinutesFromStart} mins from origin</p>
-                <p className="text-emerald-600 font-semibold mt-0.5">Fare: {selectedBus.country === 'Nepal' ? 'NPR' : 'INR'} {chowk.fareFromStart}</p>
+                <p className="text-slate-500">Stop #{chowk.sequence} • ~{chowk.estimatedMinutesFromStart} mins</p>
+                <p className="text-emerald-600 font-semibold mt-0.5">Fare: {selectedBus.originCountry === 'Nepal' ? 'NPR' : 'INR'} {chowk.fareFromStart}</p>
               </div>
             </Popup>
           </Marker>
         ))}
 
-        {/* Live Buses */}
         {buses.map((bus) => {
           if (!bus.lastLocation?.coordinates) return null;
           const [lng, lat] = bus.lastLocation.coordinates;
@@ -154,25 +151,27 @@ const LiveMap = ({ buses = [], selectedBus, onSelectBus, country = 'Nepal' }) =>
               eventHandlers={{ click: () => onSelectBus && onSelectBus(bus) }}
             >
               <Popup>
-                <div className="p-3 text-xs space-y-2 min-w-[220px]">
+                <div className="p-3 text-xs space-y-2 min-w-[230px]">
                   <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-1.5">
                     <div>
-                      <h4 className="font-bold text-slate-900 dark:text-white text-sm">{bus.busNumber}</h4>
-                      <p className="text-[10px] text-slate-400">{bus.busName}</p>
+                      <h4 className="font-bold text-slate-900 dark:text-white text-sm">{bus.busName}</h4>
+                      <p className="text-[10px] text-slate-400 font-mono">{bus.busNumber}</p>
                     </div>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-600 font-bold uppercase">
                       {bus.status}
                     </span>
                   </div>
 
-                  <p className="text-[11px] font-medium text-emerald-600">
+                  <p className="text-[11px] font-semibold text-emerald-600">
                     {bus.originChowk} ➔ {bus.destinationChowk}
                   </p>
 
                   <div className="space-y-1 text-slate-600 dark:text-slate-300">
                     <div className="flex justify-between">
-                      <span>Speed:</span>
-                      <span className="font-semibold text-emerald-600">{bus.lastLocation.speed || 40} km/h</span>
+                      <span>Fare:</span>
+                      <span className="font-bold text-slate-900 dark:text-white">
+                        {bus.originCountry === 'Nepal' ? 'NPR' : 'INR'} {bus.baseFare}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Driver:</span>
@@ -180,23 +179,34 @@ const LiveMap = ({ buses = [], selectedBus, onSelectBus, country = 'Nepal' }) =>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-1.5 pt-1">
-                    {driverPhone && (
-                      <a
-                        href={`tel:${driverPhone.replace(/\s+/g, '')}`}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded-lg font-semibold flex items-center justify-center space-x-1"
-                      >
-                        <PhoneCall className="w-3.5 h-3.5" />
-                        <span>Call</span>
-                      </a>
-                    )}
+                  {/* Booking & Calling Actions */}
+                  <div className="space-y-1.5 pt-1">
                     <button
-                      onClick={() => handleShareWhatsApp(bus)}
-                      className="bg-slate-800 hover:bg-slate-700 text-white py-1.5 rounded-lg font-semibold flex items-center justify-center space-x-1"
+                      onClick={() => onBookSeat && onBookSeat(bus)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 rounded-xl flex items-center justify-center space-x-1 shadow-sm transition"
                     >
-                      <Share2 className="w-3.5 h-3.5" />
-                      <span>Share</span>
+                      <Ticket className="w-3.5 h-3.5" />
+                      <span>Book Seat Online</span>
                     </button>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {driverPhone && (
+                        <a
+                          href={`tel:${driverPhone.replace(/\s+/g, '')}`}
+                          className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 py-1.5 rounded-lg font-semibold flex items-center justify-center space-x-1 text-[11px]"
+                        >
+                          <PhoneCall className="w-3 h-3 text-emerald-600" />
+                          <span>Call</span>
+                        </a>
+                      )}
+                      <button
+                        onClick={() => handleShareWhatsApp(bus)}
+                        className="bg-slate-800 hover:bg-slate-700 text-white py-1.5 rounded-lg font-semibold flex items-center justify-center space-x-1 text-[11px]"
+                      >
+                        <Share2 className="w-3 h-3" />
+                        <span>Share</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </Popup>

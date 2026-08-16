@@ -1,362 +1,195 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Bus, User, Phone, Plus, Edit2, Trash2, ShieldAlert, CheckCircle2, UserCheck, RefreshCw, X } from 'lucide-react';
+import { Bus, ShieldCheck, Check, X, AlertCircle, FileText, CheckCircle2, User, Clock, Trash2 } from 'lucide-react';
 
 const AdminDashboard = () => {
   const [buses, setBuses] = useState([]);
-  const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editBusId, setEditBusId] = useState(null);
-  const [message, setMessage] = useState('');
+  const [activeTab, setActiveTab] = useState('compliance'); // 'compliance' | 'all'
+  const [rejectModalBus, setRejectModalBus] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [actionMsg, setActionMsg] = useState('');
 
-  // Form State
-  const [formData, setFormData] = useState({
-    busNumber: '',
-    busName: '',
-    registrationNumber: '',
-    capacity: 40,
-    origin: 'Central Terminal',
-    destination: 'Campus Station',
-    stateRegion: 'Bagmati / Central',
-    driverId: '',
-    substituteDriverId: '',
-    isDriverAbsent: false,
-    status: 'idle'
-  });
-
-  const fetchData = async () => {
+  const fetchComplianceData = async () => {
     try {
-      const [busRes, driverRes] = await Promise.all([
-        api.get('/buses'),
-        api.get('/auth/drivers')
-      ]);
-      setBuses(busRes.data.buses || []);
-      setDrivers(driverRes.data.drivers || []);
+      const res = await api.get('/buses/admin/compliance');
+      setBuses(res.data.buses || []);
     } catch (err) {
-      console.error('Error fetching admin data:', err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchComplianceData();
   }, []);
 
-  const handleOpenAdd = () => {
-    setEditBusId(null);
-    setFormData({
-      busNumber: '',
-      busName: 'Metro Express',
-      registrationNumber: '',
-      capacity: 45,
-      origin: 'Kathmandu / Central Hub',
-      destination: 'Campus Terminal',
-      stateRegion: 'Bagmati / Central',
-      driverId: drivers[0]?._id || '',
-      substituteDriverId: '',
-      isDriverAbsent: false,
-      status: 'active'
-    });
-    setShowModal(true);
-  };
-
-  const handleOpenEdit = (bus) => {
-    setEditBusId(bus._id);
-    setFormData({
-      busNumber: bus.busNumber,
-      busName: bus.busName || '',
-      registrationNumber: bus.registrationNumber,
-      capacity: bus.capacity,
-      origin: bus.origin || '',
-      destination: bus.destination || '',
-      stateRegion: bus.stateRegion || 'Bagmati / Central',
-      driverId: bus.driverId?._id || '',
-      substituteDriverId: bus.substituteDriverId?._id || '',
-      isDriverAbsent: bus.isDriverAbsent || false,
-      status: bus.status
-    });
-    setShowModal(true);
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to remove this bus from the fleet?')) return;
+  const handleVerify = async (id, status, reason = '') => {
     try {
-      await api.delete(`/buses/${id}`);
-      setMessage('Bus removed successfully.');
-      fetchData();
+      await api.patch(`/buses/${id}/verify`, { status, rejectionReason: reason });
+      setActionMsg(`Bus status updated to ${status}.`);
+      setRejectModalBus(null);
+      setRejectReason('');
+      fetchComplianceData();
+      setTimeout(() => setActionMsg(''), 3500);
     } catch (err) {
-      console.error(err);
+      alert(err.response?.data?.message || 'Verification update failed.');
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      if (editBusId) {
-        await api.put(`/buses/${editBusId}`, formData);
-        setMessage('Bus and driver assignment updated.');
-      } else {
-        await api.post('/buses', formData);
-        setMessage('New bus registered to fleet.');
-      }
-      setShowModal(false);
-      fetchData();
-      setTimeout(() => setMessage(''), 4000);
-    } catch (err) {
-      alert(err.response?.data?.message || 'Error saving bus.');
-    }
-  };
+  const pendingBuses = buses.filter(b => b.verificationStatus === 'pending_verification');
+  const displayedBuses = activeTab === 'compliance' ? pendingBuses : buses;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Admin Fleet & Driver Management Hub</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Admin Compliance & KYC Verification Hub</h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Configure buses, assign routes, manage driver absences, and deploy substitute personnel.
+            Review bus owner documents, enforce road permit regulations, and authorize live GPS radar access.
           </p>
         </div>
-        <button
-          onClick={handleOpenAdd}
-          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center space-x-1.5 shadow-sm transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add New Bus</span>
-        </button>
+
+        {/* Tab Switcher */}
+        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl">
+          <button
+            onClick={() => setActiveTab('compliance')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+              activeTab === 'compliance' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-500'
+            }`}
+          >
+            Pending KYC Approval ({pendingBuses.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+              activeTab === 'all' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs' : 'text-slate-500'
+            }`}
+          >
+            All Fleet Inventory ({buses.length})
+          </button>
+        </div>
       </div>
 
-      {message && (
-        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs flex items-center space-x-2">
+      {actionMsg && (
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 text-emerald-700 text-xs rounded-xl flex items-center space-x-2">
           <CheckCircle2 className="w-4 h-4" />
-          <span>{message}</span>
+          <span>{actionMsg}</span>
         </div>
       )}
 
-      {/* Fleet Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
+      {/* Compliance Table */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300">
-            <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-slate-700">
+            <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-700">
               <tr>
-                <th className="p-3.5">Bus / Fleet Name</th>
-                <th className="p-3.5">Plate & Capacity</th>
-                <th className="p-3.5">Origin ➔ Destination</th>
-                <th className="p-3.5">Assigned Driver & Phone</th>
-                <th className="p-3.5">Driver Status / Substitute</th>
-                <th className="p-3.5 text-right">Actions</th>
+                <th className="p-3.5">Bus & Owner</th>
+                <th className="p-3.5">Route & Fare</th>
+                <th className="p-3.5">Bluebook & Route Permit</th>
+                <th className="p-3.5">Insurance Policy</th>
+                <th className="p-3.5">KYC Status</th>
+                <th className="p-3.5 text-right">Compliance Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
-              {buses.map((bus) => (
-                <tr key={bus._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition">
-                  <td className="p-3.5">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-2 bg-emerald-100 dark:bg-emerald-950 text-emerald-600 rounded-lg">
-                        <Bus className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-slate-900 dark:text-white">{bus.busNumber}</p>
-                        <p className="text-[11px] text-slate-400">{bus.busName}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="p-3.5 font-mono">
-                    <span className="text-slate-900 dark:text-white">{bus.registrationNumber}</span>
-                    <span className="text-slate-400 block text-[10px]">{bus.capacity} seats</span>
-                  </td>
-                  <td className="p-3.5">
-                    <span className="text-emerald-600 dark:text-emerald-400">{bus.origin}</span>
-                    <span className="text-slate-400 block text-[10px]">➔ {bus.destination}</span>
-                  </td>
-                  <td className="p-3.5">
-                    {bus.driverId ? (
-                      <div>
-                        <span className="font-semibold text-slate-900 dark:text-white">{bus.driverId.name}</span>
-                        <span className="text-slate-400 block text-[11px] font-mono">{bus.driverId.phone || 'No phone'}</span>
-                      </div>
-                    ) : (
-                      <span className="text-rose-500 font-semibold">Unassigned</span>
-                    )}
-                  </td>
-                  <td className="p-3.5">
-                    {bus.isDriverAbsent ? (
-                      <div>
-                        <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 font-bold text-[10px] uppercase">
-                          Driver Absent
-                        </span>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          Substitute: {bus.substituteDriverId?.name || 'Pending assignment'}
-                        </p>
-                      </div>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-600 font-semibold text-[10px]">
-                        Primary Active
-                      </span>
-                    )}
-                  </td>
-                  <td className="p-3.5 text-right space-x-2">
-                    <button
-                      onClick={() => handleOpenEdit(bus)}
-                      className="p-1.5 text-slate-500 hover:text-emerald-600 transition"
-                      title="Edit"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(bus._id)}
-                      className="p-1.5 text-slate-500 hover:text-rose-600 transition"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+              {displayedBuses.length === 0 ? (
+                <tr>
+                  <td colSpan="6" className="p-8 text-center text-slate-400">
+                    No pending vehicle verifications found. All fleet vehicles are verified.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                displayedBuses.map((bus) => (
+                  <tr key={bus._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                    <td className="p-3.5">
+                      <p className="font-bold text-slate-900 dark:text-white">{bus.busName}</p>
+                      <p className="font-mono text-[11px] text-slate-400">{bus.busNumber} • {bus.registrationNumber}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Owner: {bus.operatorId?.name || 'Authorized Samiti'}</p>
+                    </td>
+                    <td className="p-3.5">
+                      <p className="font-semibold text-emerald-600">{bus.originDistrict} ➔ {bus.destDistrict}</p>
+                      <p className="text-[11px] font-bold text-slate-900 dark:text-white">Fare: NPR {bus.baseFare}</p>
+                    </td>
+                    <td className="p-3.5 font-mono text-[11px] space-y-0.5">
+                      <p>RC: <span className="font-bold text-slate-800 dark:text-slate-200">{bus.documents?.bluebookNumber || 'N/A'}</span></p>
+                      <p>Permit: <span className="font-bold text-slate-800 dark:text-slate-200">{bus.documents?.routePermitNumber || 'N/A'}</span></p>
+                    </td>
+                    <td className="p-3.5 font-mono text-[11px]">
+                      <span className="font-bold text-slate-800 dark:text-slate-200">{bus.documents?.insurancePolicyNumber || 'N/A'}</span>
+                    </td>
+                    <td className="p-3.5">
+                      {bus.verificationStatus === 'verified' ? (
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-600 font-bold text-[10px]">
+                          ✓ Verified
+                        </span>
+                      ) : bus.verificationStatus === 'rejected' ? (
+                        <span className="px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950 text-rose-600 font-bold text-[10px]">
+                          ✕ Rejected
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950 text-amber-600 font-bold text-[10px]">
+                          ● Pending Review
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-3.5 text-right space-x-1.5">
+                      {bus.verificationStatus !== 'verified' && (
+                        <button
+                          onClick={() => handleVerify(bus._id, 'verified')}
+                          className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition inline-flex items-center space-x-1 shadow-2xs"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Approve</span>
+                        </button>
+                      )}
+                      {bus.verificationStatus !== 'rejected' && (
+                        <button
+                          onClick={() => setRejectModalBus(bus)}
+                          className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition inline-flex items-center space-x-1 shadow-2xs"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Reject</span>
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Add / Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="max-w-lg w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xl relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <h3 className="font-bold text-base text-slate-900 dark:text-white mb-4">
-              {editBusId ? 'Modify Fleet Bus & Driver Substitution' : 'Add New Fleet Bus'}
-            </h3>
-
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Bus Number</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.busNumber}
-                    onChange={(e) => setFormData({ ...formData, busNumber: e.target.value })}
-                    placeholder="BUS-101"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Bus Name</label>
-                  <input
-                    type="text"
-                    value={formData.busName}
-                    onChange={(e) => setFormData({ ...formData, busName: e.target.value })}
-                    placeholder="Express Superline"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Plate Number</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.registrationNumber}
-                    onChange={(e) => setFormData({ ...formData, registrationNumber: e.target.value })}
-                    placeholder="BA 2 KHA 4567"
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Passenger Capacity</label>
-                  <input
-                    type="number"
-                    required
-                    value={formData.capacity}
-                    onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Origin (Start Point)</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.origin}
-                    onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Destination</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.destination}
-                    onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">Primary Assigned Driver</label>
-                <select
-                  value={formData.driverId}
-                  onChange={(e) => setFormData({ ...formData, driverId: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-white focus:outline-none"
-                >
-                  <option value="">-- Select Driver --</option>
-                  {drivers.map(d => (
-                    <option key={d._id} value={d._id}>{d.name} ({d.phone || 'No phone'})</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Driver Absence & Substitute Option */}
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">Is Driver Absent?</span>
-                  <input
-                    type="checkbox"
-                    checked={formData.isDriverAbsent}
-                    onChange={(e) => setFormData({ ...formData, isDriverAbsent: e.target.checked })}
-                    className="w-4 h-4 text-amber-600 rounded"
-                  />
-                </div>
-                {formData.isDriverAbsent && (
-                  <div>
-                    <label className="block text-[11px] font-medium text-amber-900 dark:text-amber-200 mb-1">
-                      Assign Substitute Driver
-                    </label>
-                    <select
-                      value={formData.substituteDriverId}
-                      onChange={(e) => setFormData({ ...formData, substituteDriverId: e.target.value })}
-                      className="w-full bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white"
-                    >
-                      <option value="">-- Select Substitute Driver --</option>
-                      {drivers.map(d => (
-                        <option key={d._id} value={d._id}>{d.name} ({d.phone})</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-
+      {/* Reject Modal */}
+      {rejectModalBus && (
+        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl">
+            <h3 className="font-bold text-base text-slate-900 dark:text-white mb-2">Reject Vehicle KYC Verification</h3>
+            <p className="text-xs text-slate-500 mb-3">Provide a clear reason (e.g. invalid Bluebook or expired insurance policy):</p>
+            <textarea
+              rows={3}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Expired route permit number, vehicle plate mismatch..."
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 text-xs text-slate-900 dark:text-white focus:outline-none mb-4"
+            ></textarea>
+            <div className="flex space-x-2">
               <button
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 rounded-xl text-xs transition mt-3"
+                onClick={() => setRejectModalBus(null)}
+                className="flex-1 bg-slate-100 dark:bg-slate-800 py-2 rounded-xl text-xs font-semibold"
               >
-                Save Bus & Deploy Changes
+                Cancel
               </button>
-            </form>
+              <button
+                onClick={() => handleVerify(rejectModalBus._id, 'rejected', rejectReason)}
+                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-2 rounded-xl text-xs font-semibold"
+              >
+                Confirm Rejection
+              </button>
+            </div>
           </div>
         </div>
       )}

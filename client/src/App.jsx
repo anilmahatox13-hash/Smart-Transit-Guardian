@@ -8,6 +8,8 @@ import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
 import DriverConsole from './pages/DriverConsole';
+import OperatorHub from './pages/OperatorHub';
+import MyTickets from './pages/MyTickets';
 
 function App() {
   return (
@@ -23,6 +25,24 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/my-tickets"
+            element={
+              <ProtectedRoute>
+                <MyTickets />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/operator"
+            element={
+              <ProtectedRoute allowedRoles={['operator', 'admin']}>
+                <OperatorHub />
               </ProtectedRoute>
             }
           />
