@@ -12,6 +12,8 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const busRoutes = require('./routes/busRoutes');
 const routeRoutes = require('./routes/routeRoutes');
+const tripRoutes = require('./routes/tripRoutes');
+const locationRoutes = require('./routes/locationRoutes');
 
 const app = express();
 
@@ -57,6 +59,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/buses', busRoutes);
 app.use('/api/routes', routeRoutes);
+app.use('/api/trips', tripRoutes);
+app.use('/api/locations', locationRoutes);
 
 // 404 Fallback Handler
 app.use((req, res) => {
