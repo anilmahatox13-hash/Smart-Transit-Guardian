@@ -37,3 +37,8 @@ test-results/
 Thumbs.db
 .vscode/
 .idea/
+
+*.jpg
+*.jpeg
+*.png
+*.pdf
