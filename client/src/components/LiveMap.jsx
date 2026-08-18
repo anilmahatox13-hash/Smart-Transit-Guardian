@@ -1,7 +1,18 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { PhoneCall, Share2, Ticket, ShieldCheck, MapPin } from 'lucide-react';
+import 'leaflet/dist/leaflet.css';
+import { 
+  Bus as BusIcon, 
+  Maximize2, 
+  Minimize2, 
+  Gauge, 
+  MapPin, 
+  Phone, 
+  Radio, 
+  ArrowRight,
+  ExternalLink
+} from 'lucide-react';
 
 const MapResizer = () => {
   const map = useMap();
@@ -14,199 +25,308 @@ const MapResizer = () => {
   return null;
 };
 
-const MapCenterController = ({ center, zoom }) => {
+const MapViewController = ({ targetCoords, zoomLevel }) => {
   const map = useMap();
   useEffect(() => {
-    if (center && center[0] !== undefined && center[1] !== undefined) {
-      map.flyTo(center, zoom || 13, { duration: 1.2 });
+    if (targetCoords && targetCoords[0] && targetCoords[1]) {
+      map.flyTo(targetCoords, zoomLevel || 13, {
+        duration: 1.2,
+        easeLinearity: 0.25
+      });
     }
-  }, [center, zoom, map]);
+  }, [targetCoords, zoomLevel, map]);
   return null;
 };
 
-const createBusIcon = (bus, isSelected) => {
-  const isEnRoute = bus.status === 'active';
-  const color = isEnRoute ? '#059669' : '#d97706';
+const MAP_LAYERS = {
+  google_streets: {
+    name: 'Google Streets',
+    url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Maps'
+  },
+  google_hybrid: {
+    name: 'Google Satellite',
+    url: 'https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
+    attribution: '&copy; Google Satellite Imagery'
+  },
+  osm_transit: {
+    name: 'OpenStreetMap',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors'
+  }
+};
+
+const createBusPin = (bus, isSelected) => {
+  const speed = bus.currentSpeed || 0;
+  const shortName = bus.busName ? bus.busName.split(' ')[0] : 'Bus';
 
   return L.divIcon({
-    className: 'custom-bus-marker',
+    className: 'google-bus-marker',
     html: `
-      <div style="position: relative; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;">
+      <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
         <div style="
-          width: 32px;
-          height: 32px;
-          background-color: ${color};
-          border: 2px solid #ffffff;
+          position: absolute;
+          top: 2px;
+          width: 42px;
+          height: 42px;
           border-radius: 50%;
+          background: ${isSelected ? 'rgba(16, 185, 129, 0.4)' : 'rgba(14, 165, 233, 0.35)'};
+          animation: pulse-ring 1.8s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+          pointer-events: none;
+        "></div>
+
+        <div style="
+          position: relative;
+          background: ${isSelected ? '#059669' : '#0284c7'};
+          color: #ffffff;
+          padding: 8px;
+          border-radius: 9999px;
+          border: 2.5px solid #ffffff;
+          box-shadow: 0 6px 16px rgba(0,0,0,0.35);
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #ffffff;
-          box-shadow: ${isSelected ? '0 0 16px rgba(5, 150, 105, 0.9)' : '0 4px 8px rgba(0,0,0,0.3)'};
+          transform: scale(${isSelected ? 1.2 : 1});
+          transition: transform 0.2s ease;
         ">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8 6v6"></path>
-            <path d="M15 6v6"></path>
-            <path d="M2 12h19.6"></path>
-            <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-2.8-1.5-4-3-4H4c-1.5 0-3 1.2-3 4 0 .4.1.8.2 1.2l.8 2.8h3"></path>
-            <circle cx="7" cy="18" r="2"></circle>
-            <circle cx="17" cy="18" r="2"></circle>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 6v6"/><path d="M15 6v6"/><path d="M2 12h19.6"/>
+            <path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.6-.4-1-1-1H3c-.6 0-1 .4-1 1 0 .4.1.8.2 1.2.3 1.1.8 2.8.8 2.8h3"/>
+            <circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>
           </svg>
         </div>
+
+        <div style="
+          margin-top: 4px;
+          background: #0f172a;
+          color: #f8fafc;
+          font-size: 10px;
+          font-weight: 800;
+          padding: 2px 7px;
+          border-radius: 9999px;
+          box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+          border: 1px solid rgba(255,255,255,0.25);
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          white-space: nowrap;
+        ">
+          <span style="color: #34d399;">●</span>
+          <span>${shortName}</span>
+          <span style="background: rgba(255,255,255,0.15); padding: 1px 4px; border-radius: 4px; font-family: monospace;">${speed} km/h</span>
+        </div>
       </div>
+      <style>
+        @keyframes pulse-ring {
+          0% { transform: scale(0.6); opacity: 0.9; }
+          100% { transform: scale(1.6); opacity: 0; }
+        }
+      </style>
     `,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
-    popupAnchor: [0, -20]
+    iconSize: [84, 56],
+    iconAnchor: [42, 24]
   });
 };
 
-const createChowkIcon = () => {
+const createChowkPin = (chowk, sequence, isPassed) => {
   return L.divIcon({
     className: 'chowk-marker',
     html: `
       <div style="
-        width: 14px;
-        height: 14px;
-        background: #0284c7;
-        border: 2px solid white;
-        border-radius: 50%;
-        box-shadow: 0 0 6px rgba(2, 132, 199, 0.8);
-      "></div>
+        background: ${isPassed ? '#94a3b8' : '#ffffff'};
+        color: ${isPassed ? '#ffffff' : '#0f172a'};
+        border: 2px solid ${isPassed ? '#64748b' : '#10b981'};
+        font-weight: 800;
+        font-size: 10px;
+        font-family: monospace;
+        width: 22px;
+        height: 22px;
+        border-radius: 9999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      ">
+        ${sequence}
+      </div>
     `,
-    iconSize: [14, 14],
-    iconAnchor: [7, 7]
+    iconSize: [22, 22],
+    iconAnchor: [11, 11]
   });
 };
 
-const LiveMap = ({ buses = [], selectedBus, onSelectBus, onBookSeat, country = 'Nepal' }) => {
-  const defaultCenter = country === 'India' ? [28.6139, 77.2090] : [27.7172, 85.3240];
+const LiveMap = ({ buses = [], selectedBus, onSelectBus, onBookSeat }) => {
+  const [activeLayer, setActiveLayer] = useState('google_streets');
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
-  const currentCenter = selectedBus?.lastLocation?.coordinates
-    ? [selectedBus.lastLocation.coordinates[1], selectedBus.lastLocation.coordinates[0]]
-    : (buses.length > 0 && buses[0].lastLocation?.coordinates
-        ? [buses[0].lastLocation.coordinates[1], buses[0].lastLocation.coordinates[0]]
-        : defaultCenter);
+  const defaultCenter = [27.7172, 85.3240];
 
-  const routePolyline = selectedBus?.routeChowks?.map(c => [c.coordinates[1], c.coordinates[0]]) || [];
+  const targetMapCenter = useMemo(() => {
+    if (selectedBus?.currentLocation?.coordinates && selectedBus.currentLocation.coordinates.length === 2) {
+      const [lng, lat] = selectedBus.currentLocation.coordinates;
+      return [lat, lng];
+    }
+    if (buses.length > 0 && buses[0].currentLocation?.coordinates && buses[0].currentLocation.coordinates.length === 2) {
+      const [lng, lat] = buses[0].currentLocation.coordinates;
+      return [lat, lng];
+    }
+    return defaultCenter;
+  }, [selectedBus, buses]);
 
-  const handleShareWhatsApp = (bus) => {
-    const [lng, lat] = bus.lastLocation.coordinates;
-    const text = encodeURIComponent(`🚍 Live Bus Tracking: Tracking ${bus.busName} (${bus.busNumber}) from ${bus.originChowk} to ${bus.destinationChowk}. Location: https://maps.google.com/?q=${lat},${lng}`);
-    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+  const corridorPolyline = useMemo(() => {
+    if (!selectedBus?.routeChowks || selectedBus.routeChowks.length === 0) return [];
+    return selectedBus.routeChowks
+      .filter(c => c.coordinates && c.coordinates.length === 2)
+      .map(c => [c.coordinates[1], c.coordinates[0]]);
+  }, [selectedBus]);
+
+  const getGoogleMapsLink = (bus) => {
+    const coords = bus?.currentLocation?.coordinates || bus?.lastLocation?.coordinates || [85.3240, 27.7172];
+    return `https://www.google.com/maps/search/?api=1&query=${coords[1]},${coords[0]}`;
   };
 
   return (
-    <div className="relative w-full h-[580px] rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm bg-slate-100 dark:bg-slate-900">
+    <div className={`relative w-full transition-all duration-300 rounded-3xl overflow-hidden shadow-xl border border-slate-200 dark:border-slate-800 ${
+      isFullScreen ? 'fixed inset-0 z-[999] rounded-none h-screen w-screen' : 'h-[580px]'
+    }`}>
+      
+      {/* Layer Switcher */}
+      <div className="absolute top-3.5 right-3.5 z-[400] flex items-center space-x-1.5 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1.5 rounded-2xl shadow-lg border border-slate-200 dark:border-slate-800 text-xs">
+        <button
+          type="button"
+          onClick={() => setActiveLayer('google_streets')}
+          className={`px-3 py-1 rounded-xl font-bold transition ${
+            activeLayer === 'google_streets' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          Google Map
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveLayer('google_hybrid')}
+          className={`px-3 py-1 rounded-xl font-bold transition ${
+            activeLayer === 'google_hybrid' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          Satellite
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveLayer('osm_transit')}
+          className={`px-3 py-1 rounded-xl font-bold transition ${
+            activeLayer === 'osm_transit' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300'
+          }`}
+        >
+          OSM
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsFullScreen(!isFullScreen)}
+          className="p-1 text-slate-500 hover:text-slate-900 dark:hover:text-white"
+        >
+          {isFullScreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+
       <MapContainer
-        center={defaultCenter}
-        zoom={country === 'India' ? 6 : 8}
+        center={targetMapCenter}
+        zoom={selectedBus ? 13 : 8}
         scrollWheelZoom={true}
         className="w-full h-full"
       >
         <MapResizer />
-        <MapCenterController center={currentCenter} zoom={selectedBus ? 13 : (country === 'India' ? 6 : 8)} />
+        <MapViewController targetCoords={targetMapCenter} zoomLevel={selectedBus ? 13 : 8} />
 
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maxZoom={19}
+          url={MAP_LAYERS[activeLayer].url}
+          attribution={MAP_LAYERS[activeLayer].attribution}
+          maxZoom={20}
         />
 
-        {routePolyline.length > 1 && (
+        {corridorPolyline.length > 1 && (
           <Polyline
-            positions={routePolyline}
-            pathOptions={{ color: '#059669', weight: 4, opacity: 0.85, dashArray: '6, 8' }}
+            positions={corridorPolyline}
+            pathOptions={{ color: '#059669', weight: 5, opacity: 0.85, dashArray: '6, 8' }}
           />
         )}
 
-        {selectedBus?.routeChowks?.map((chowk, idx) => (
-          <Marker
-            key={chowk._id || idx}
-            position={[chowk.coordinates[1], chowk.coordinates[0]]}
-            icon={createChowkIcon()}
-          >
-            <Popup>
-              <div className="p-2 text-xs">
-                <p className="font-bold text-slate-900">{chowk.name}</p>
-                <p className="text-slate-500">Stop #{chowk.sequence} • ~{chowk.estimatedMinutesFromStart} mins</p>
-                <p className="text-emerald-600 font-semibold mt-0.5">Fare: {selectedBus.originCountry === 'Nepal' ? 'NPR' : 'INR'} {chowk.fareFromStart}</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+        {selectedBus?.routeChowks?.map((chowk, idx) => {
+          if (!chowk.coordinates || chowk.coordinates.length < 2) return null;
+          const pos = [chowk.coordinates[1], chowk.coordinates[0]];
+          const isPassed = (selectedBus.currentChowkIndex || 0) >= (chowk.sequence || idx + 1);
+
+          return (
+            <Marker
+              key={`chowk-${idx}`}
+              position={pos}
+              icon={createChowkPin(chowk, chowk.sequence || idx + 1, isPassed)}
+            >
+              <Popup>
+                <div className="p-1 text-xs">
+                  <span className="font-bold text-emerald-600">Stop #{chowk.sequence || idx + 1}</span>
+                  <p className="font-extrabold text-slate-900">{chowk.name}</p>
+                  <p className="text-slate-500 font-medium">Stage Fare: NPR {chowk.fareFromStart || 0}</p>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
 
         {buses.map((bus) => {
-          if (!bus.lastLocation?.coordinates) return null;
-          const [lng, lat] = bus.lastLocation.coordinates;
+          if (!bus.currentLocation?.coordinates || bus.currentLocation.coordinates.length < 2) return null;
+          const [lng, lat] = bus.currentLocation.coordinates;
           const isSelected = selectedBus?._id === bus._id;
-          const activeDriver = bus.isDriverAbsent ? bus.substituteDriverId : bus.driverId;
-          const driverPhone = activeDriver?.phone || bus.contactPhone;
 
           return (
             <Marker
               key={bus._id}
               position={[lat, lng]}
-              icon={createBusIcon(bus, isSelected)}
-              eventHandlers={{ click: () => onSelectBus && onSelectBus(bus) }}
+              icon={createBusPin(bus, isSelected)}
+              eventHandlers={{
+                click: () => onSelectBus && onSelectBus(bus)
+              }}
             >
               <Popup>
-                <div className="p-3 text-xs space-y-2 min-w-[230px]">
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-1.5">
+                <div className="p-2 text-xs space-y-2 min-w-[210px]">
+                  <div className="border-b border-slate-100 pb-1 flex justify-between items-center">
                     <div>
-                      <h4 className="font-bold text-slate-900 dark:text-white text-sm">{bus.busName}</h4>
-                      <p className="text-[10px] text-slate-400 font-mono">{bus.busNumber}</p>
+                      <h4 className="font-bold text-slate-900">{bus.busName}</h4>
+                      <span className="font-mono text-slate-400 text-[10px]">{bus.busNumber}</span>
                     </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-600 font-bold uppercase">
-                      {bus.status}
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[9px]">
+                      {bus.busType}
                     </span>
                   </div>
 
-                  <p className="text-[11px] font-semibold text-emerald-600">
-                    {bus.originChowk} ➔ {bus.destinationChowk}
-                  </p>
-
-                  <div className="space-y-1 text-slate-600 dark:text-slate-300">
-                    <div className="flex justify-between">
-                      <span>Fare:</span>
-                      <span className="font-bold text-slate-900 dark:text-white">
-                        {bus.originCountry === 'Nepal' ? 'NPR' : 'INR'} {bus.baseFare}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Driver:</span>
-                      <span className="font-medium text-slate-900 dark:text-white">{activeDriver?.name || 'Assigned Driver'}</span>
-                    </div>
+                  <div className="space-y-1 text-slate-600">
+                    <p className="flex items-center space-x-1">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{bus.originDistrict} ➔ {bus.destDistrict}</span>
+                    </p>
+                    <p className="flex items-center space-x-1">
+                      <Gauge className="w-3.5 h-3.5 text-sky-600" />
+                      <span>Speed: <b>{bus.currentSpeed || 0} km/h</b></span>
+                    </p>
                   </div>
 
-                  {/* Booking & Calling Actions */}
                   <div className="space-y-1.5 pt-1">
-                    <button
-                      onClick={() => onBookSeat && onBookSeat(bus)}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 rounded-xl flex items-center justify-center space-x-1 shadow-sm transition"
+                    <a
+                      href={getGoogleMapsLink(bus)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold py-1.5 px-2 rounded-xl text-center flex items-center justify-center space-x-1 transition"
                     >
-                      <Ticket className="w-3.5 h-3.5" />
-                      <span>Book Seat Online</span>
-                    </button>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Open in Google Maps</span>
+                    </a>
 
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {driverPhone && (
-                        <a
-                          href={`tel:${driverPhone.replace(/\s+/g, '')}`}
-                          className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 py-1.5 rounded-lg font-semibold flex items-center justify-center space-x-1 text-[11px]"
-                        >
-                          <PhoneCall className="w-3 h-3 text-emerald-600" />
-                          <span>Call</span>
-                        </a>
-                      )}
-                      <button
-                        onClick={() => handleShareWhatsApp(bus)}
-                        className="bg-slate-800 hover:bg-slate-700 text-white py-1.5 rounded-lg font-semibold flex items-center justify-center space-x-1 text-[11px]"
-                      >
-                        <Share2 className="w-3 h-3" />
-                        <span>Share</span>
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onBookSeat && onBookSeat(bus)}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 rounded-xl text-center shadow-xs transition"
+                    >
+                      Book Seat (NPR {bus.baseFare})
+                    </button>
                   </div>
                 </div>
               </Popup>
@@ -214,6 +334,45 @@ const LiveMap = ({ buses = [], selectedBus, onSelectBus, onBookSeat, country = '
           );
         })}
       </MapContainer>
+
+      {selectedBus && (
+        <div className="absolute bottom-3 left-3 right-3 z-[400] bg-slate-900/95 backdrop-blur-xl text-white p-3.5 rounded-2xl shadow-xl border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <BusIcon className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <h3 className="font-extrabold text-sm text-white">{selectedBus.busName}</h3>
+                <span className="font-mono text-emerald-400 text-xs">{selectedBus.busNumber}</span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                Corridor: {selectedBus.originDistrict} ➔ {selectedBus.destDistrict} ({selectedBus.currentSpeed || 0} km/h)
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+            <a
+              href={getGoogleMapsLink(selectedBus)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs transition shadow-md flex items-center space-x-1"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>GMap Track</span>
+            </a>
+
+            <button
+              type="button"
+              onClick={() => onBookSeat && onBookSeat(selectedBus)}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs transition shadow-md"
+            >
+              Book Seat (NPR {selectedBus.baseFare})
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

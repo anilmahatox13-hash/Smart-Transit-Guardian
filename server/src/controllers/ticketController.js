@@ -1,16 +1,8 @@
 const crypto = require('crypto');
 const Ticket = require('../models/Ticket');
-const { Bus } = require('../models');
+const { Bus, User } = require('../models');
 
-// Phone Validation Regex (Nepal +977 98/97 or India +91 6-9)
-const isValidPhone = (phone) => {
-  const clean = phone.replace(/[\s\-]/g, '');
-  const nepalRegex = /^(?:\+?977)?[9][78]\d{8}$/;
-  const indiaRegex = /^(?:\+?91)?[6-9]\d{9}$/;
-  return nepalRegex.test(clean) || indiaRegex.test(clean);
-};
-
-// @desc    Book Seats & Issue Cryptographically Signed Ticket
+// @desc    Book Seats & Issue Digital Ticket
 // @route   POST /api/tickets/book
 const bookTicket = async (req, res) => {
   try {
@@ -28,84 +20,106 @@ const bookTicket = async (req, res) => {
       paymentMethod
     } = req.body;
 
-    // 1. Validation Checks
-    if (!busId || !passengerName || !passengerPhone || !selectedSeats || selectedSeats.length === 0) {
-      return res.status(400).json({ success: false, message: 'Please provide all mandatory booking details.' });
+    if (!busId) {
+      return res.status(400).json({ success: false, message: 'Bus selection is required.' });
     }
 
-    if (!isValidPhone(passengerPhone)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid phone number format. Please enter a valid 10-digit Nepal (+977 98/97...) or India (+91 6-9...) mobile number.'
-      });
+    if (!passengerName || !String(passengerName).trim()) {
+      return res.status(400).json({ success: false, message: 'Passenger name is required.' });
+    }
+
+    if (!passengerPhone || String(passengerPhone).trim().length < 7) {
+      return res.status(400).json({ success: false, message: 'A valid contact phone number is required.' });
+    }
+
+    if (!selectedSeats || !Array.isArray(selectedSeats) || selectedSeats.length === 0) {
+      return res.status(400).json({ success: false, message: 'Please select at least one seat.' });
     }
 
     const bus = await Bus.findById(busId);
     if (!bus) {
-      return res.status(404).json({ success: false, message: 'Selected bus not found.' });
+      return res.status(404).json({ success: false, message: 'Bus not found.' });
     }
 
-    // 2. Prevent Double Booking (Atomic Check)
-    const existingBookings = await Ticket.find({
+    const bookingDate = travelDate || new Date().toISOString().split('T')[0];
+
+    // Check for seat conflict
+    const existingConflict = await Ticket.findOne({
       busId,
-      travelDate: travelDate || new Date().toISOString().split('T')[0],
+      travelDate: bookingDate,
       status: { $in: ['confirmed', 'boarded'] },
       selectedSeats: { $in: selectedSeats }
     });
 
-    if (existingBookings.length > 0) {
-      const conflictSeats = existingBookings.flatMap(t => t.selectedSeats).filter(s => selectedSeats.includes(s));
+    if (existingConflict) {
+      const conflictSeats = existingConflict.selectedSeats.filter(s => selectedSeats.includes(s));
       return res.status(409).json({
         success: false,
-        message: `Seats [${conflictSeats.join(', ')}] were just booked by another passenger. Please select alternative seats.`
+        message: `Seat(s) [${conflictSeats.join(', ')}] are already booked. Please select different seats.`
       });
     }
 
-    // 3. Issue Ticket
-    const paymentStatus = paymentMethod === 'cash_on_boarding' ? 'pending_cash' : 'paid';
+    // Determine passenger ID (from auth middleware or fallback)
+    let passengerId = req.user?.id || req.user?._id;
+    if (!passengerId) {
+      const existingUser = await User.findOne({ phone: String(passengerPhone).trim() });
+      passengerId = existingUser?._id || bus.operatorId;
+    }
+
+    const finalPaymentMethod = paymentMethod || 'cash_on_boarding';
+    const finalPaymentStatus = finalPaymentMethod === 'cash_on_boarding' ? 'pending_cash' : 'paid';
+    const computedFare = Number(totalFare) > 0 ? Number(totalFare) : (bus.baseFare || 500) * selectedSeats.length;
+
+    const ticketNumber = 'TKT-' + Math.floor(100000 + Math.random() * 900000);
+    const rawPayload = `${ticketNumber}:${bus._id}:${String(passengerPhone).trim()}:${selectedSeats.join(',')}:${computedFare}`;
+    const secret = process.env.JWT_SECRET || 'smarttransit_secure_telematics_secret_key_2026';
+    const verificationHash = crypto.createHmac('sha256', secret).update(rawPayload).digest('hex');
 
     const ticket = await Ticket.create({
-      busId,
-      passengerId: req.user.id,
-      passengerName: passengerName.trim(),
-      passengerPhone: passengerPhone.trim(),
-      passengerEmail: passengerEmail ? passengerEmail.trim().toLowerCase() : req.user.email,
+      ticketNumber,
+      busId: bus._id,
+      passengerId,
+      passengerName: String(passengerName).trim(),
+      passengerPhone: String(passengerPhone).trim(),
+      passengerEmail: passengerEmail ? String(passengerEmail).trim().toLowerCase() : (req.user?.email || ''),
       selectedSeats,
-      originChowk: originChowk || bus.originChowk,
-      destinationChowk: destinationChowk || bus.destinationChowk,
-      travelDate: travelDate || new Date().toISOString().split('T')[0],
-      totalFare: Number(totalFare) || bus.baseFare * selectedSeats.length,
-      currency: currency || (bus.originCountry === 'Nepal' ? 'NPR' : 'INR'),
-      paymentMethod,
-      paymentStatus
+      originChowk: originChowk || bus.originChowk || bus.originDistrict || 'Starting Hub',
+      destinationChowk: destinationChowk || bus.destinationChowk || bus.destDistrict || 'Destination Hub',
+      travelDate: bookingDate,
+      totalFare: computedFare,
+      currency: currency || (bus.originCountry === 'India' ? 'INR' : 'NPR'),
+      paymentMethod: finalPaymentMethod,
+      paymentStatus: finalPaymentStatus,
+      verificationHash,
+      status: 'confirmed'
     });
 
-    // Update Bus occupancy count
+    // Update bus occupancy
     bus.currentOccupancy = Math.min(bus.capacity, (bus.currentOccupancy || 0) + selectedSeats.length);
-    if (bus.currentOccupancy >= bus.capacity) bus.crowdStatus = 'full';
-    else if (bus.currentOccupancy >= bus.capacity * 0.75) bus.crowdStatus = 'moderate';
     await bus.save();
 
-    const populated = await Ticket.findById(ticket._id).populate('busId', 'busNumber busName registrationNumber contactPhone');
+    const populatedTicket = await Ticket.findById(ticket._id)
+      .populate('busId', 'busNumber busName registrationNumber contactPhone busType originDistrict destDistrict payoutDetails');
 
     res.status(201).json({
       success: true,
-      message: paymentMethod === 'cash_on_boarding'
-        ? 'Seat reserved! Pay cash directly to the bus conductor upon boarding.'
-        : 'Payment verified! Your digital e-ticket has been generated.',
-      ticket: populated
+      message: finalPaymentMethod === 'cash_on_boarding'
+        ? 'Seat confirmed! Please pay cash to the bus conductor upon boarding.'
+        : 'Payment verified! Your digital boarding pass has been generated.',
+      ticket: populatedTicket || ticket
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('Booking Controller Error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Server error while issuing ticket.' });
   }
 };
 
-// @desc    Get All Active Tickets for Logged-In Passenger
+// @desc    Get Passenger Tickets
 // @route   GET /api/tickets/my-tickets
 const getMyTickets = async (req, res) => {
   try {
     const tickets = await Ticket.find({ passengerId: req.user.id })
-      .populate('busId', 'busNumber busName registrationNumber contactPhone busType')
+      .populate('busId', 'busNumber busName registrationNumber contactPhone busType originDistrict destDistrict payoutDetails')
       .sort({ createdAt: -1 });
 
     res.status(200).json({ success: true, count: tickets.length, tickets });
@@ -114,43 +128,36 @@ const getMyTickets = async (req, res) => {
   }
 };
 
-// @desc    Public / Conductor Cryptographic Ticket Verifier
-// @route   GET /api/tickets/verify/:ticketHash
+// @desc    Verify Ticket Authenticity
+// @route   GET /api/tickets/verify/:identifier
 const verifyTicket = async (req, res) => {
   try {
-    const { ticketHash } = req.params;
-    const ticket = await Ticket.findOne({ verificationHash: ticketHash })
-      .populate('busId', 'busNumber busName registrationNumber contactPhone')
-      .populate('passengerId', 'name phone');
+    const cleanId = String(req.params.identifier).trim();
+    const ticket = await Ticket.findOne({
+      $or: [
+        { ticketNumber: cleanId.toUpperCase() },
+        { verificationHash: cleanId }
+      ]
+    }).populate('busId', 'busNumber busName registrationNumber contactPhone originDistrict destDistrict');
 
     if (!ticket) {
-      return res.status(404).json({
-        success: false,
-        valid: false,
-        message: 'FRAUD ALERT: Invalid or counterfeit ticket. No matching cryptographic record found.'
-      });
+      return res.status(404).json({ success: false, valid: false, message: 'Invalid or counterfeit ticket.' });
     }
-
-    // Re-compute HMAC to ensure database record hasn't been altered
-    const rawPayload = `${ticket.ticketNumber}:${ticket.busId._id}:${ticket.passengerPhone}:${ticket.selectedSeats.join(',')}:${ticket.totalFare}`;
-    const secret = process.env.JWT_SECRET || 'smarttransit_secure_telematics_secret_key_2026';
-    const computedHash = crypto.createHmac('sha256', secret).update(rawPayload).digest('hex');
-
-    const isValid = computedHash === ticket.verificationHash;
 
     res.status(200).json({
       success: true,
-      valid: isValid,
+      valid: true,
       ticket: {
         ticketNumber: ticket.ticketNumber,
-        busNumber: ticket.busId?.busNumber,
         busName: ticket.busId?.busName,
+        busNumber: ticket.busId?.busNumber,
         passengerName: ticket.passengerName,
         passengerPhone: ticket.passengerPhone,
         selectedSeats: ticket.selectedSeats,
         route: `${ticket.originChowk} ➔ ${ticket.destinationChowk}`,
         travelDate: ticket.travelDate,
         totalFare: `${ticket.currency} ${ticket.totalFare}`,
+        paymentMethod: ticket.paymentMethod,
         paymentStatus: ticket.paymentStatus,
         status: ticket.status,
         issuedAt: ticket.createdAt

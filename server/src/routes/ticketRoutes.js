@@ -5,6 +5,6 @@ const { protect } = require('../middleware/auth');
 
 router.post('/book', protect, bookTicket);
 router.get('/my-tickets', protect, getMyTickets);
-router.get('/verify/:ticketHash', verifyTicket);
+router.get('/verify/:identifier', verifyTicket);
 
 module.exports = router;

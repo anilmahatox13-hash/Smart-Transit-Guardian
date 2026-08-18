@@ -4,15 +4,13 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, lowercase: true, trim: true, sparse: true },
-  phone: { type: String, required: true, trim: true, unique: true },
+  phone: { type: String, required: true, trim: true },
   password: { type: String, required: true, minlength: 6, select: false },
   role: {
     type: String,
     enum: ['passenger', 'driver', 'operator', 'admin'],
     default: 'passenger'
   },
-  
-  // 1. Universal Government Identity Proof (For All Roles)
   governmentId: {
     idType: {
       type: String,
@@ -23,17 +21,13 @@ const userSchema = new mongoose.Schema({
     issuingDistrictOrAuthority: { type: String, default: 'Kathmandu' },
     isVerified: { type: Boolean, default: true }
   },
-
-  // 2. Bus Owner / Company KYC Profile
   operatorKyc: {
     companyName: { type: String, default: '' },
-    registrationNumber: { type: String, default: '' }, // Company / Samiti Reg No
+    registrationNumber: { type: String, default: '' },
     panVatNumber: { type: String, default: '' },
     businessAddress: { type: String, default: '' },
     isVerified: { type: Boolean, default: false }
   },
-
-  // 3. Driver Professional KYC (Managed & Recruited by Bus Owner)
   driverKyc: {
     licenseNumber: { type: String, default: '' },
     licenseCategory: { type: String, default: 'Heavy Vehicle (Category B/G)' },
@@ -42,7 +36,6 @@ const userSchema = new mongoose.Schema({
     policeClearanceVerified: { type: Boolean, default: true },
     yearsOfExperience: { type: Number, default: 5 }
   },
-
   stateRegion: { type: String, default: 'Bagmati / Central' },
   ratings: [{
     passengerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

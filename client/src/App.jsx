@@ -4,12 +4,13 @@ import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
+import Home from './pages/Home';
 import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
 import DriverConsole from './pages/DriverConsole';
 import OperatorHub from './pages/OperatorHub';
 import MyTickets from './pages/MyTickets';
+import VerifyTicket from './pages/VerifyTicket';
 
 function App() {
   return (
@@ -19,15 +20,8 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/" element={<Home />} />
+          <Route path="/verify-ticket" element={<VerifyTicket />} />
 
           <Route
             path="/my-tickets"
