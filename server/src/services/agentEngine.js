@@ -5,7 +5,32 @@ const { sendMultiChannelAlert } = require('./alertService');
 const Groq = require('groq-sdk');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
-const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.1-8b-instant';
+const GROQ_MODEL_CANDIDATES = [
+  'qwen/qwen3.8-27b',
+  'llama-4-scout-17b-16e-instruct',
+  'qwen/qwen3-32b',
+  'openai/gpt-oss-20b'
+];
+let resolvedGroqModelPromise;
+
+async function resolveGroqModel() {
+  if (!resolvedGroqModelPromise) {
+    resolvedGroqModelPromise = groq.models.list().then((response) => {
+      const availableModels = new Set((response.data || []).map(model => model.id));
+      const configuredModel = process.env.GROQ_MODEL?.trim();
+      const selectedModel = [configuredModel, ...GROQ_MODEL_CANDIDATES]
+        .find(model => model && availableModels.has(model));
+
+      if (!selectedModel) {
+        throw new Error('No supported Groq model is available for this API key. Set GROQ_MODEL to a model returned by Groq.');
+      }
+
+      return selectedModel;
+    });
+  }
+
+  return resolvedGroqModelPromise;
+}
 
 const TOOLS = [
   {
@@ -86,7 +111,8 @@ async function executeAgentReasoningLoop(userPrompt, context = {}) {
   }
 
   try {
-    reasoningSteps.push({ step: 2, phase: 'REASONING', thought: `Routing to Groq model ${GROQ_MODEL} for intent evaluation.` });
+    const groqModel = await resolveGroqModel();
+    reasoningSteps.push({ step: 2, phase: 'REASONING', thought: `Routing to Groq model ${groqModel} for intent evaluation.` });
 
     const tools = [
       {
@@ -120,7 +146,7 @@ async function executeAgentReasoningLoop(userPrompt, context = {}) {
         },
         { role: "user", content: userPrompt }
       ],
-      model: GROQ_MODEL,
+      model: groqModel,
       temperature: 0.2,
       tools: tools,
       tool_choice: "auto",
