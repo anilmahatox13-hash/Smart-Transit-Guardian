@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -11,6 +11,7 @@ import DriverConsole from './pages/DriverConsole';
 import OperatorHub from './pages/OperatorHub';
 import MyTickets from './pages/MyTickets';
 import VerifyTicket from './pages/VerifyTicket';
+import AgentAssistantWidget from './components/AgentAssistantWidget';
 
 function App() {
   return (
@@ -71,6 +72,9 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+
+      {/* Autonomous Agentic Assistant Floating Widget */}
+      <AgentAssistantWidget />
     </div>
   );
 }
